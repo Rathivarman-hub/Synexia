@@ -1,11 +1,14 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import { ThemeProvider } from './context/ThemeContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AssessmentSessionProvider } from './context/AssessmentSessionContext';
 
 // Components
 import Navbar from './components/Navbar';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
 import { ProtectedRoute, AdminRoute, StudentRoute } from './components/ProtectedRoute';
 
 // Public Pages
@@ -16,30 +19,56 @@ import NotFoundPage from './pages/public/NotFoundPage';
 
 // Student Pages
 import StudentDashboard from './pages/student/StudentDashboard';
-import LanguageSelectionPage from './pages/student/LanguageSelectionPage';
-import AssessmentPage from './pages/student/AssessmentPage';
-import ResultsPage from './pages/student/ResultsPage';
-import LeaderboardPage from './pages/student/LeaderboardPage';
 import ProfilePage from './pages/student/ProfilePage';
+import CodingProblemsPage from './pages/student/CodingProblemsPage';
+import CodingProblemPage from './pages/student/CodingProblemPage';
+import CodingLeaderboardPage from './pages/student/CodingLeaderboardPage';
+import SubmissionsPage from './pages/student/SubmissionsPage';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
-import QuestionManagementPage from './pages/admin/QuestionManagementPage';
 import StudentsPage from './pages/admin/StudentsPage';
-import AnalyticsPage from './pages/admin/AnalyticsPage';
 import SettingsPage from './pages/admin/SettingsPage';
+import CodingProblemManagementPage from './pages/admin/CodingProblemManagementPage';
 
-// Layout wrapper to conditionally show navbar
+// Layout wrapper to conditionally show sidebar/navbar
 const Layout = ({ children }) => {
   const location = useLocation();
-  // Hide navbar on assessment screen to avoid distraction/cheating
-  const showNavbar = !location.pathname.startsWith('/assessment/');
+  const { user } = useAuth();
 
+  if (/^\/coding\/problems(?:\/|$)/.test(location.pathname)) {
+    return (
+      <AssessmentSessionProvider>
+        <div className="assessment-app-layout">{children}</div>
+      </AssessmentSessionProvider>
+    );
+  }
+
+  // For unauthenticated pages, use the basic Navbar
+  if (!user) {
+    return (
+      <AssessmentSessionProvider>
+        <>
+          <Navbar />
+          {children}
+        </>
+      </AssessmentSessionProvider>
+    );
+  }
+
+  // Dashboard layout for authenticated users
   return (
-    <>
-      {showNavbar && <Navbar />}
-      {children}
-    </>
+    <AssessmentSessionProvider>
+      <div className="app-dashboard-layout">
+        <Sidebar />
+        <div className="app-main-content">
+          <Header />
+          <main className="app-page-wrapper">
+            {children}
+          </main>
+        </div>
+      </div>
+    </AssessmentSessionProvider>
   );
 };
 
@@ -64,36 +93,72 @@ function App() {
                   </StudentRoute>
                 }
               />
-              <Route
-                path="/languages"
-                element={
-                  <StudentRoute>
-                    <LanguageSelectionPage />
-                  </StudentRoute>
-                }
-              />
-              <Route
-                path="/assessment/:language"
-                element={
-                  <StudentRoute>
-                    <AssessmentPage />
-                  </StudentRoute>
-                }
-              />
-              <Route
-                path="/results/:id"
-                element={<ProtectedRoute><ResultsPage /></ProtectedRoute>}
-              />
-              <Route
-                path="/leaderboard"
-                element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>}
-              />
+              {/* Retired MCQ URLs. WHY redirect instead of 404: these paths are
+                  already in students' bookmarks, in the browser history of
+                  anyone who used the old build, and in old emails. A redirect
+                  lands them on the equivalent coding screen in one hop, whereas a
+                  404 reads as "the site is broken". The `replace` keeps the dead
+                  URL out of the history so Back does not bounce. */}
+              <Route path="/languages" element={<Navigate to="/coding/problems" replace />} />
+              <Route path="/assessment/:language" element={<Navigate to="/coding/problems" replace />} />
+              <Route path="/results/:id" element={<Navigate to="/coding/problems" replace />} />
+              <Route path="/admin/questions" element={<Navigate to="/admin/coding-problems" replace />} />
+
               <Route
                 path="/profile"
                 element={
                   <StudentRoute>
                     <ProfilePage />
                   </StudentRoute>
+                }
+              />
+
+              {/* Coding module — students.
+                  WHY the fixed /coding/problems route is declared BEFORE
+                  /coding/problems/:slug: React Router scores static segments
+                  above dynamic ones, so the reverse order is safe, but keeping
+                  the literal first makes the intent obvious to the next reader
+                  and avoids relying on ranking behaviour. */}
+              <Route
+                path="/coding/problems"
+                element={
+                  <ProtectedRoute>
+                    <CodingProblemsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/coding/problems/:slug"
+                element={
+                  <ProtectedRoute>
+                    <CodingProblemPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Both ranking URLs are retained for admins; AdminRoute redirects
+                  students to their assessment dashboard. */}
+              <Route
+                path="/leaderboard"
+                element={
+                  <AdminRoute>
+                    <CodingLeaderboardPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/coding/leaderboard"
+                element={
+                  <AdminRoute>
+                    <CodingLeaderboardPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/coding/submissions"
+                element={
+                  <ProtectedRoute>
+                    <SubmissionsPage />
+                  </ProtectedRoute>
                 }
               />
 
@@ -107,14 +172,6 @@ function App() {
                 }
               />
               <Route
-                path="/admin/questions"
-                element={
-                  <AdminRoute>
-                    <QuestionManagementPage />
-                  </AdminRoute>
-                }
-              />
-              <Route
                 path="/admin/students"
                 element={
                   <AdminRoute>
@@ -123,10 +180,10 @@ function App() {
                 }
               />
               <Route
-                path="/admin/analytics"
+                path="/admin/profile"
                 element={
                   <AdminRoute>
-                    <AnalyticsPage />
+                    <SettingsPage />
                   </AdminRoute>
                 }
               />
@@ -135,6 +192,14 @@ function App() {
                 element={
                   <AdminRoute>
                     <SettingsPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/admin/coding-problems"
+                element={
+                  <AdminRoute>
+                    <CodingProblemManagementPage />
                   </AdminRoute>
                 }
               />

@@ -1,0 +1,307 @@
+/* ============================================
+   SYNEXIA — CODING MODULE (shared)
+   Loaded by the list, editor and leaderboard pages.
+   ============================================ */
+
+/* ─── Difficulty + status pills ─────────────────────────────────────────── */
+.difficulty-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.difficulty-badge--sm { font-size: 0.68rem; padding: 2px 9px; }
+.difficulty-badge--md { font-size: 0.75rem; padding: 4px 11px; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.status-badge--solved { background: rgba(16, 185, 129, 0.14); color: var(--success); }
+.status-badge--attempted { background: rgba(245, 158, 11, 0.14); color: #B45309; }
+.status-badge--none { background: rgba(112, 121, 145, 0.12); color: var(--text-muted); }
+
+[data-theme='dark'] .status-badge--attempted { color: #FBBF24; }
+
+/* ─── Page furniture shared by all coding pages ─────────────────────────── */
+.coding-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.coding-head-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+.coding-muted { color: var(--text-muted); font-size: 0.88rem; }
+
+.coding-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+/* WHY `100dvh` and not `100vh`: on mobile browsers 100vh overflows the visible
+   area by the height of the address bar, which pushes the controls off-screen. */
+.coding-center-full { min-height: 100dvh; }
+
+.coding-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 24px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+}
+.coding-empty h3 { color: var(--text-primary); font-size: 1.15rem; font-weight: 700; margin: 0; }
+.coding-empty p { margin: 0; font-size: 0.9rem; }
+.coding-empty--inline { padding: 36px 20px; }
+
+.coding-error-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: var(--danger);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.coding-h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 22px 0 8px;
+}
+
+/* ─── Tags ──────────────────────────────────────────────────────────────── */
+.coding-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.coding-tags-bottom { margin-top: 22px; }
+.coding-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgba(0, 35, 102, 0.07);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+/* ─── Table bits ────────────────────────────────────────────────────────── */
+.coding-table th.th-title,
+.coding-table td.td-title,
+.coding-table th:first-child,
+.coding-table td:first-child {
+  text-align: left !important;
+  padding-left: 20px !important;
+}
+
+.coding-table th.th-center,
+.coding-table td.td-center {
+  text-align: center !important;
+}
+
+.coding-table th.th-right,
+.coding-table td.td-right,
+.coding-table th:last-child,
+.coding-table td:last-child {
+  text-align: right !important;
+  padding-right: 20px !important;
+}
+
+.coding-table td.td-title .coding-title-link,
+.coding-title-link {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 0.95rem;
+  display: block;
+  text-align: left !important;
+}
+a.coding-title-link:hover { color: var(--secondary); text-decoration: underline; }
+
+.coding-table td.td-title .coding-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+  justify-content: flex-start !important;
+}
+
+.question-actions-cell {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.coding-points-cell { font-weight: 700; color: var(--text-primary); text-align: center; }
+
+.coding-sub-note {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+.coding-acceptance { font-weight: 700; }
+
+.coding-solve-btn { padding: 6px 14px !important; font-size: 0.78rem !important; }
+
+.coding-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(130px, 0.8fr) auto;
+  gap: 12px;
+  margin-bottom: 18px;
+  align-items: center;
+}
+.coding-select { cursor: pointer; }
+.coding-sort-toggle { white-space: nowrap; padding: 10px 16px !important; font-size: 0.82rem !important; }
+
+.coding-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+.coding-pager-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
+.coding-pager button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.coding-list-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.coding-mini-stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.coding-mini-stat-value { font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
+.coding-mini-stat-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ─── Verdict colours (shared by editor + submissions list) ─────────────── */
+.coding-verdict--success { --verdict: var(--success); }
+.coding-verdict--danger { --verdict: var(--danger); }
+.coding-verdict--warning { --verdict: #F59E0B; }
+.coding-verdict--muted { --verdict: var(--text-muted); }
+
+/* ─── Monaco chrome ─────────────────────────────────────────────────────── */
+.monaco-wrapper { position: relative; width: 100%; }
+.monaco-wrapper.is-ready { opacity: 1; }
+
+.monaco-loading,
+.monaco-fallback-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 180px;
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.monaco-fallback { display: flex; flex-direction: column; height: 100%; min-height: 220px; }
+.monaco-fallback-notice {
+  min-height: 0;
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+  color: #B45309;
+  font-size: 0.8rem;
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+[data-theme='dark'] .monaco-fallback-notice { color: #FBBF24; }
+.monaco-fallback-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 14px;
+  background: #0B1424;
+  color: #E2E8F0;
+  tab-size: 4;
+}
+
+/* ─── Inline spinner ────────────────────────────────────────────────────── */
+.inline-spinner { display: inline-flex; align-items: center; gap: 10px; }
+.inline-spinner-ring {
+  display: inline-block;
+  border-style: solid;
+  border-color: var(--border);
+  border-top-color: var(--secondary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.inline-spinner-label { font-size: 0.88rem; color: var(--text-muted); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ─── Compact button modifier ───────────────────────────────────────────────
+   WHY defined here and not in index.css: .btn-techiz is a global component used
+   by the assessment CTAs, where the roomy 10px/24px padding is deliberate. The
+   coding surfaces pack buttons into table rows and card headers, where that
+   padding pushes the row height out of alignment. This is a modifier, not a new
+   component, so it composes with .btn-techiz / .btn-outline-techiz. */
+.btn-techiz--sm {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  gap: 6px;
+}
+.btn-techiz--sm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
+}
+
+/* ─── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .coding-toolbar { grid-template-columns: 1fr 1fr; }
+  .coding-list-stats { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .coding-toolbar { grid-template-columns: 1fr; }
+  .coding-page-head { align-items: flex-start; flex-direction: column; }
+}

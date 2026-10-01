@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Form, Alert } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
-import logo from '../../assets/logo.png';
+import logo from '../../assets/1logo.png';
 
 const RegisterPage = () => {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', college: '', rollNumber: '' });
@@ -22,7 +22,7 @@ const RegisterPage = () => {
     setLoading(true);
     try {
       const user = await register({ name: form.name, email: form.email, password: form.password, college: form.college, rollNumber: form.rollNumber });
-      toast.success(`Account created! Welcome to Techiz, ${user.name?.split(' ')[0]}!`);
+      toast.success(`Account created! Welcome to SYNEXIA, ${user.name?.split(' ')[0]}!`);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
@@ -49,7 +49,7 @@ const RegisterPage = () => {
               <div className="text-center mb-4">
                 <img src={logo} alt="Techiz" style={{ width: 72, height: 56, objectFit: 'contain', marginBottom: 12 }} />
                 <h2 style={{ fontWeight: 800, color: 'var(--text-primary)', marginBottom: 6 }}>Create Account</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Join Techiz and start your assessment journey</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Join SYNEXIA and start your assessment journey</p>
               </div>
 
               {error && <Alert variant="danger" style={{ borderRadius: 10, border: 'none', background: 'rgba(239,71,111,0.1)', color: 'var(--danger)' }}>{error}</Alert>}

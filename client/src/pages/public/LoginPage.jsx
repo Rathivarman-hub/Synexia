@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Form, Alert } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
-import logo from '../../assets/logo.png';
+import logo from '../../assets/1logo.png';
 
 const LoginPage = () => {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -37,7 +37,7 @@ const LoginPage = () => {
               <div className="text-center mb-4">
                 <img src={logo} alt="Techiz" style={{ width: 72, height: 56, objectFit: 'contain', marginBottom: 12 }} />
                 <h2 style={{ fontWeight: 800, color: 'var(--text-primary)', marginBottom: 6 }}>Welcome Back</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Sign in to your Techiz account</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Sign in to your SYNEXIA account</p>
               </div>
 
               {error && <Alert variant="danger" style={{ borderRadius: 10, border: 'none', background: 'rgba(239,71,111,0.1)', color: 'var(--danger)' }}>{error}</Alert>}

@@ -1,7 +1,12 @@
 import jwt from 'jsonwebtoken';
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
+import { getCache, setCache } from '../utils/cache.js';
 
+// ─── protect ──────────────────────────────────────────────────────────────────
+// WHY: Without caching, every single authenticated API call hits MongoDB to
+// look up the user. At 1000 req/s that's 1000 DB reads/s just for auth.
+// With Redis caching the user doc for 60s, >99% of those reads are eliminated.
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
@@ -16,11 +21,25 @@ export const protect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
-    if (!req.user) {
+    const cacheKey = `user:${decoded.id}`;
+
+    // 1. Try Redis cache first
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      req.user = cached;
+      return next();
+    }
+
+    // 2. Cache miss — fetch from MongoDB
+    const user = await User.findById(decoded.id).select('-password').lean();
+    if (!user) {
       res.status(401);
       throw new Error('User not found');
     }
+
+    // 3. Cache for 60 seconds (invalidated on profile update)
+    await setCache(cacheKey, user, 60);
+    req.user = user;
     next();
   } catch (err) {
     res.status(401);

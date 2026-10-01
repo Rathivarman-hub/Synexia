@@ -1,6 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import { generateToken } from '../middleware/auth.js';
+import { deleteCache } from '../utils/cache.js';
 
 // @desc    Register student
 // @route   POST /api/auth/register
@@ -72,6 +73,7 @@ export const login = asyncHandler(async (req, res) => {
 // @route   GET /api/auth/me
 // @access  Private
 export const getMe = asyncHandler(async (req, res) => {
+  // req.user is already populated & cached by the protect middleware
   const user = await User.findById(req.user._id).select('-password');
   res.json({ success: true, data: user });
 });
@@ -87,15 +89,27 @@ export const updateProfile = asyncHandler(async (req, res) => {
   if (college) user.college = college;
   if (rollNumber) user.rollNumber = rollNumber;
   if (password) user.password = password;
+
   if (avatar !== undefined) {
-    if (avatar && (!avatar.startsWith('data:image/') || avatar.length > 2800000)) {
+    // WHY: Storing raw base64 in MongoDB creates giant documents (up to 2MB each).
+    // This bloats the collection, slows down queries that return user documents,
+    // and wastes egress bandwidth. Accept URL strings only (use Cloudinary/S3).
+    // Legacy base64 values already in the DB are preserved as-is.
+    if (avatar && avatar.startsWith('data:image/')) {
       res.status(400);
-      throw new Error('Please upload an image smaller than 2 MB');
+      throw new Error(
+        'Direct image upload is not supported. Please upload to Cloudinary first, then provide the URL. ' +
+        'See SCALABILITY.md for setup instructions.'
+      );
     }
     user.avatar = avatar;
   }
 
   const updated = await user.save();
+
+  // Invalidate the Redis cache for this user so next request gets fresh data
+  await deleteCache(`user:${req.user._id}`);
+
   res.json({
     success: true,
     data: {

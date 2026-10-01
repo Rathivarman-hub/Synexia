@@ -23,7 +23,22 @@ const ProfilePage = () => {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setAvatar(reader.result);
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const size = 512;
+        const scale = Math.min(1, size / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        const compressedAvatar = canvas.toDataURL('image/jpeg', 0.82);
+        localStorage.setItem('techiz-avatar', compressedAvatar);
+        setAvatar(compressedAvatar);
+      };
+      image.onerror = () => toast.error('Could not read this image');
+      image.src = reader.result;
+    };
     reader.readAsDataURL(file);
   };
 
@@ -35,7 +50,7 @@ const ProfilePage = () => {
       const payload = { name: form.name, college: form.college, rollNumber: form.rollNumber, avatar };
       if (form.password) payload.password = form.password;
       const { data } = await api.put('/auth/me', payload);
-      updateUser(data.data);
+      updateUser({ ...data.data, avatar: data.data.avatar || avatar });
       toast.success('Profile updated successfully');
       setForm((f) => ({ ...f, password: '', confirmPassword: '' }));
     } catch (err) {

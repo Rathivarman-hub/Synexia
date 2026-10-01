@@ -1,0 +1,76 @@
+/* ============================================
+   ADMIN — STUDENTS DIRECTORY
+   ============================================ */
+
+.stu-rate-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* The expanded row under a student. WHY a muted background rather than a modal:
+   an admin routinely compares a student's aggregate row against their history, so
+   the detail has to stay on screen next to the row it belongs to. */
+.stu-drilldown {
+  background: var(--bg-secondary);
+}
+
+.stu-drilldown-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 12px 0;
+}
+
+.stu-drilldown-note {
+  margin: 12px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.stu-sub-table {
+  width: 100%;
+  font-size: 0.9rem;
+  background: transparent;
+}
+
+.stu-sub-table th {
+  text-align: left;
+  padding: 8px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.stu-sub-table td {
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+/* WHY the difficulty sits beside the title rather than in its own column: it is
+   a chip, and a dedicated column would spend a fifth of the table's width on
+   something the admin only scans. */
+.stu-sub-difficulty {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.stu-status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  /* Horizontal scroll beats a 7-column squeeze on a phone. */
+  .stu-sub-table { min-width: 640px; }
+}

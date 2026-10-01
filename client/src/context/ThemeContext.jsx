@@ -22,17 +22,17 @@ const LIGHT_THEME = {
 
 const DARK_THEME = {
   name: 'dark',
-  background: '#0F172A',
-  backgroundSecondary: '#111827',
-  card: '#1E293B',
+  background: '#040810',
+  backgroundSecondary: '#0A1120',
+  card: '#0E182D',
   text: '#F8FAFC',
-  textSecondary: '#CBD5E1',
-  accent: '#3B82F6',
-  accentLight: '#1E40AF',
-  accentDark: '#06B6D4',
-  border: '#334155',
-  hover: '#1F2937',
-  shadow: 'rgba(0, 0, 0, 0.3)',
+  textSecondary: '#E2E8F0',
+  accent: '#D1007A',
+  accentLight: '#E6008C',
+  accentDark: '#002366',
+  border: 'rgba(209, 0, 122, 0.25)',
+  hover: 'rgba(0, 35, 102, 0.2)',
+  shadow: 'rgba(0, 0, 0, 0.6)',
   success: '#10B981',
   warning: '#F59E0B',
   danger: '#EF4444',
@@ -40,8 +40,8 @@ const DARK_THEME = {
 };
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState(() => localStorage.getItem('techiz-theme') || 'light');
-  const currentTheme = theme === 'dark' ? DARK_THEME : LIGHT_THEME;
+  const [theme, setTheme] = useState('dark');
+  const currentTheme = DARK_THEME;
 
   useEffect(() => {
     const htmlElement = document.documentElement;
@@ -68,7 +68,8 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [theme, currentTheme]);
 
-  const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'));
+
+  const toggleTheme = () => {}; // Disabled
   
   const isDark = theme === 'dark';
   const isLight = theme === 'light';

@@ -1,0 +1,238 @@
+/* ============================================
+   STUDENT DASHBOARD — CODING CARDS
+   ============================================ */
+
+/* WHY a scoped prefix on every rule here: StudentDashboard.css is imported
+   directly by the dashboard, so unprefixed names like `.dash-coding-title` are
+   fine, but the card reuses global tokens and must not override anything the
+   assessment CTAs depend on. */
+
+.dash-coding-card {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.dash-coding-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.dash-coding-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.dash-coding-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ─── Progress bar ─────────────────────────────────────────────────────── */
+
+.dash-coding-progress { margin-bottom: 4px; }
+
+.dash-coding-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.dash-coding-progress-count {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dash-coding-progress-total {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.dash-coding-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.dash-coding-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  /* WHY a transition: the bar animates from 0 on mount, which reads as the
+     count "filling up" rather than appearing already settled. */
+  transition: width 0.6s ease;
+  background: var(--gradient-primary);
+}
+
+.dash-coding-progress-pct {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ─── Stat tiles ───────────────────────────────────────────────────────── */
+
+.dash-coding-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* WHY hover elevation on a read-only tile: it hints "clickable", which these
+     are not. Instead they use a flat border and a tinted icon background so the
+     affordance stays honest. */
+  background: transparent;
+  height: 100%;
+}
+
+.dash-coding-stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  /* CurrentColor is inherited from the inline `tone` prop, so the tinted
+     background and the glyph can never drift out of sync. */
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 1.15rem;
+}
+
+.dash-coding-stat-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dash-coding-stat-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.15;
+}
+
+.dash-coding-stat-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.dash-coding-stat-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  opacity: 0.8;
+  margin-top: 2px;
+  /* WHY truncate rather than wrap: a long rank hint would otherwise make one tile
+     taller than its row-mate and break the 2x2 grid alignment. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Rank card ────────────────────────────────────────────────────────── */
+
+.dash-coding-rank {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.dash-coding-rank-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.dash-coding-rank-value {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 4px 0 2px;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--primary);
+}
+
+.dash-coding-rank-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.dash-coding-rank-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  margin-top: 14px;
+}
+
+.dash-coding-rank-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gradient-primary);
+  transition: width 0.6s ease;
+}
+
+/* ─── Empty state ──────────────────────────────────────────────────────── */
+
+.dash-coding-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 0 4px;
+}
+
+.dash-coding-empty p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.dash-coding-empty-hint {
+  color: var(--text-muted) !important;
+  font-size: 0.84rem !important;
+  font-weight: 400 !important;
+  margin-bottom: 12px !important;
+}
+
+.dash-coding-empty--compact {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+/* ─── Responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .dash-coding-card { padding: 20px; }
+  /* WHY stack the 2x2 tiles to one column: below sm the two tiles would each be
+     ~120px wide, and the value + label stop fitting on one line. */
+  .dash-coding-card .col-6 { flex: 0 0 100%; max-width: 100%; }
+}

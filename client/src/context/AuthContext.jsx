@@ -12,6 +12,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const storedUser = user;
+    const storedAvatar = localStorage.getItem('techiz-avatar') || '';
     if (!storedUser?.token) {
       setInitializing(false);
       return;
@@ -19,7 +20,11 @@ export const AuthProvider = ({ children }) => {
 
     api.get('/auth/me')
       .then(({ data }) => {
-        const refreshedUser = { ...data.data, token: storedUser.token };
+        const refreshedUser = {
+          ...data.data,
+          avatar: data.data.avatar || storedUser.avatar || storedAvatar,
+          token: storedUser.token,
+        };
         localStorage.setItem('techiz-user', JSON.stringify(refreshedUser));
         setUser(refreshedUser);
       })
@@ -35,6 +40,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await api.post('/auth/login', { email, password });
       localStorage.setItem('techiz-user', JSON.stringify(data.data));
+      if (data.data.avatar) localStorage.setItem('techiz-avatar', data.data.avatar);
       setUser(data.data);
       return data.data;
     } finally { setLoading(false); }
@@ -45,6 +51,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await api.post('/auth/register', payload);
       localStorage.setItem('techiz-user', JSON.stringify(data.data));
+      if (data.data.avatar) localStorage.setItem('techiz-avatar', data.data.avatar);
       setUser(data.data);
       return data.data;
     } finally { setLoading(false); }
@@ -52,12 +59,14 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('techiz-user');
+    localStorage.removeItem('techiz-avatar');
     setUser(null);
   };
 
   const updateUser = (updates) => {
-    const updated = { ...user, ...updates };
+    const updated = { ...user, ...updates, avatar: updates.avatar || user?.avatar || '' };
     localStorage.setItem('techiz-user', JSON.stringify(updated));
+    if (updated.avatar) localStorage.setItem('techiz-avatar', updated.avatar);
     setUser(updated);
   };
 

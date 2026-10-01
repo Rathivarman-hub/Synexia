@@ -3,13 +3,40 @@ import { Link } from 'react-router-dom';
 import { Container, Row, Col } from 'react-bootstrap';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
-import { FiBarChart2, FiCheckCircle, FiFileText, FiHelpCircle, FiPieChart, FiSettings, FiTrendingUp, FiUsers } from 'react-icons/fi';
+import { FiBarChart2, FiCheckCircle, FiCode, FiPieChart, FiSettings, FiTrendingUp, FiUser, FiUsers } from 'react-icons/fi';
 import api from '../../api/axios';
 import Spinner from '../../components/Spinner';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement);
 
-const langColors = { java: '#f89820', python: '#3776ab', c: '#a8b9cc', cpp: '#00599c', javascript: '#f7df1e' };
+// WHY hex literals and not `var(--primary)`: Chart.js paints to a <canvas>, and
+// canvas fillStyle does not resolve CSS custom properties. These are the SYNEXIA
+// brand values from the theme tokens, duplicated here because canvas needs a
+// concrete colour.
+const BRAND = { primary: '#D1007A', secondary: '#7C3AED', success: '#10B981', warning: '#F59E0B', danger: '#EF4444' };
+
+// WHY the official language colours are kept: these are DATA series, not chrome.
+// Seven greys would make the language doughnut unreadable, and a student
+// scanning for "the C++ slice" expects the language's own hue.
+const langColors = {
+  python: '#3776ab',
+  javascript: '#f7df1e',
+  java: '#f89820',
+  c: '#a8b9cc',
+  cpp: '#00599c',
+  csharp: '#68217A',
+  go: '#00ADD8',
+};
+const LANGUAGE_LABELS = {
+  python: 'Python',
+  javascript: 'JavaScript',
+  java: 'Java',
+  c: 'C',
+  cpp: 'C++',
+  csharp: '.NET',
+  go: 'Go',
+};
+const colorFor = (key) => langColors[key] || BRAND.secondary;
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -38,30 +65,36 @@ const AdminDashboard = () => {
 
   if (loading) return <Spinner text="Loading dashboard..." />;
 
+  // WHY "Acceptance Rate" and not the old "Pass Rate": there is no single graded
+  // paper per student in a coding judge, so the honest analogue is the share of
+  // SUBMISSIONS the judge accepted. See adminController.getStats.
   const statCards = [
-    { icon: <FiUsers />, label: 'Total Students', value: stats?.totalStudents || 0, color: '#6c63ff' },
-    { icon: <FiFileText />, label: 'Total Assessments', value: stats?.totalAssessments || 0, color: '#00d4aa' },
-    { icon: <FiHelpCircle />, label: 'Total Questions', value: stats?.totalQuestions || 0, color: '#d99a3d' },
-    { icon: <FiBarChart2 />, label: 'Average Score', value: `${stats?.avgScore || 0}%`, color: '#d96555' },
-    { icon: <FiCheckCircle />, label: 'Pass Rate', value: `${stats?.passRate || 0}%`, color: '#27856b' },
+    { icon: <FiUsers />, label: 'Students', value: stats?.totalStudents || 0, color: BRAND.secondary },
+    { icon: <FiUser />, label: 'Active Students', value: stats?.activeStudents || 0, color: BRAND.primary },
+    { icon: <FiCode />, label: 'Problems', value: stats?.activeProblems ?? 0, hint: `${stats?.totalProblems || 0} total`, color: BRAND.warning },
+    { icon: <FiBarChart2 />, label: 'Submissions', value: stats?.totalSubmissions || 0, color: BRAND.success },
+    { icon: <FiCheckCircle />, label: 'Acceptance Rate', value: `${stats?.acceptanceRate ?? 0}%`, color: BRAND.danger },
   ];
 
   const doughnutData = {
-    labels: langStats.map((l) => l._id.toUpperCase()),
+    labels: langStats.map((l) => LANGUAGE_LABELS[l.language] || l.language),
     datasets: [{
-      data: langStats.map((l) => l.count),
-      backgroundColor: langStats.map((l) => langColors[l._id] || '#6c63ff'),
+      data: langStats.map((l) => l.submissions),
+      backgroundColor: langStats.map((l) => colorFor(l.language)),
       borderWidth: 2,
       borderColor: 'var(--bg-card)',
     }],
   };
 
+  // WHY successRate and not an average of `accuracy`: `accuracy` is the fraction
+  // of ONE attempt's test cases that passed, so averaging it measures partial
+  // progress, not "how often does a submission fully pass".
   const barData = {
-    labels: langStats.map((l) => l._id.toUpperCase()),
+    labels: langStats.map((l) => LANGUAGE_LABELS[l.language] || l.language),
     datasets: [{
-      label: 'Avg Score %',
-      data: langStats.map((l) => Math.round(l.avgScore || 0)),
-      backgroundColor: langStats.map((l) => `${langColors[l._id] || '#6c63ff'}cc`),
+      label: 'Acceptance %',
+      data: langStats.map((l) => Math.round(l.successRate || 0)),
+      backgroundColor: langStats.map((l) => `${colorFor(l.language)}cc`),
       borderRadius: 8,
     }],
   };
@@ -70,17 +103,20 @@ const AdminDashboard = () => {
   const trendData = {
     labels: trends.map((t) => `${monthNames[t._id.month - 1]} ${t._id.year}`),
     datasets: [{
-      label: 'Assessments',
-      data: trends.map((t) => t.count),
-      backgroundColor: 'rgba(108, 99, 255, 0.7)',
+      label: 'Submissions',
+      data: trends.map((t) => t.submissions),
+      backgroundColor: `${BRAND.primary}b3`,
       borderRadius: 8,
     }],
   };
 
   const chartOptions = {
     responsive: true,
-    plugins: { legend: { labels: { color: 'var(--text-secondary)' } } },
-    scales: { x: { ticks: { color: 'var(--text-muted)' } }, y: { ticks: { color: 'var(--text-muted)' } } },
+    plugins: { legend: { labels: { color: '#888' } } },
+    scales: {
+      x: { ticks: { color: '#888' }, grid: { color: 'rgba(128,128,128,0.15)' } },
+      y: { ticks: { color: '#888' }, grid: { color: 'rgba(128,128,128,0.15)' } }
+    },
   };
 
   return (
@@ -90,7 +126,7 @@ const AdminDashboard = () => {
           <div>
             <div className="admin-eyebrow">Administration</div>
             <h2 className="admin-title">Dashboard</h2>
-            <p className="admin-subtitle">Platform overview and performance metrics</p>
+            <p className="admin-subtitle">Coding platform overview and performance metrics</p>
           </div>
         </div>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}
@@ -101,15 +137,16 @@ const AdminDashboard = () => {
                 <span className="stat-icon">{s.icon}</span>
                 <div className="stat-number" style={{ color: s.color, WebkitTextFillColor: s.color, fontSize: '2rem' }}>{s.value}</div>
                 <div className="stat-label">{s.label}</div>
+                {s.hint && <div className="stat-hint">{s.hint}</div>}
               </div>
           ))}
         </div>
 
         <Row className="g-3 mb-4">
           {[
-            { icon: <FiHelpCircle />, label: 'Manage Questions', to: '/admin/questions' },
+            { icon: <FiCode />, label: 'Manage Problems', to: '/admin/coding-problems' },
             { icon: <FiUsers />, label: 'View Students', to: '/admin/students' },
-            { icon: <FiTrendingUp />, label: 'Analytics', to: '/admin/analytics' },
+            { icon: <FiTrendingUp />, label: 'Leaderboard', to: '/leaderboard' },
             { icon: <FiSettings />, label: 'Settings', to: '/admin/settings' },
           ].map((item) => (
             <Col key={item.to} xs={6} md={3}>
@@ -126,20 +163,20 @@ const AdminDashboard = () => {
         <Row className="g-4">
           <Col md={6} lg={4}>
             <div className="techiz-card admin-chart-card p-4 fade-in">
-              <h6 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}><FiPieChart /> Language Popularity</h6>
-              {langStats.length > 0 ? <Doughnut data={doughnutData} options={{ responsive: true, plugins: { legend: { labels: { color: '#888' } } } }} /> : <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No data yet</p>}
+              <h6 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}><FiPieChart /> Submissions by Language</h6>
+              {langStats.length > 0 ? <Doughnut data={doughnutData} options={chartOptions} /> : <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No submissions yet</p>}
             </div>
           </Col>
           <Col md={6} lg={4}>
             <div className="techiz-card admin-chart-card p-4 fade-in">
-              <h6 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}><FiBarChart2 /> Average Score by Language</h6>
-              {langStats.length > 0 ? <Bar data={barData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, legend: { display: false } } }} /> : <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No data yet</p>}
+              <h6 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}><FiBarChart2 /> Acceptance by Language</h6>
+              {langStats.length > 0 ? <Bar data={barData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, legend: { display: false } } }} /> : <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No submissions yet</p>}
             </div>
           </Col>
           <Col md={12} lg={4}>
             <div className="techiz-card admin-chart-card p-4 fade-in">
-              <h6 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}><FiTrendingUp /> Monthly Attempts</h6>
-              {trends.length > 0 ? <Bar data={trendData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, legend: { display: false } } }} /> : <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No data yet</p>}
+              <h6 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}><FiTrendingUp /> Monthly Submissions</h6>
+              {trends.length > 0 ? <Bar data={trendData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, legend: { display: false } } }} /> : <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No submissions yet</p>}
             </div>
           </Col>
         </Row>

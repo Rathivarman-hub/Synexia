@@ -1,28 +1,48 @@
 {
-  "name": "techiz-server",
+  "name": "synexia-server",
   "version": "1.0.0",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "seed": "node seed.js"
+    "seed:coding": "node codingProblemsSeeder.js",
+    "seed:coding:reset": "node codingProblemsSeeder.js --reset",
+    "verify:coding": "node scripts/verifyCodingCatalogue.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs --env production",
+    "pm2:stop": "pm2 stop techiz-server",
+    "pm2:reload": "pm2 reload techiz-server",
+    "pm2:restart": "pm2 restart techiz-server",
+    "pm2:logs": "pm2 logs techiz-server",
+    "pm2:monit": "pm2 monit",
+    "pm2:status": "pm2 status"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "Techiz Assessment Platform - Backend",
   "dependencies": {
+    "axios": "^1.20.0",
     "bcryptjs": "^3.0.3",
+    "compression": "^1.8.1",
     "cors": "^2.8.6",
     "csv-parser": "^3.2.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-async-handler": "^1.2.0",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
+    "joi": "^18.2.8",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.3",
-    "multer": "^2.2.0"
+    "morgan": "^1.12.0",
+    "multer": "^2.2.0",
+    "rate-limit-redis": "^6.0.1",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

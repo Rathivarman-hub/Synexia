@@ -1,0 +1,727 @@
+/* ============================================
+   CODING PROBLEM WORKSPACE
+   Statement | Editor split. This is the only page
+   that escapes the normal .page-wrapper padding
+   because the editor needs the full viewport.
+   ============================================ */
+@import './coding-shared.css';
+
+/* WHY three explicit columns rather than auto-fit: the rail is a fixed-width
+   flex child (see ProblemNavigator.css), so it participates as a grid item and
+   the two remaining panes split what is left. minmax(0, …) is required on both
+   — without it a long <pre> test case can push a pane past 1fr and force the
+   whole grid to overflow horizontally. */
+.coding-workspace {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.05fr);
+  height: calc(100dvh - 72px);
+  min-height: 560px;
+  background: var(--bg-primary);
+}
+
+.coding-pane { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+/* ─── Timers + prev/next ───────────────────────────────────────────────── */
+
+.coding-timers {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.coding-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  /* WHY tabular figures: the value updates every second, and proportional digits
+     make the label shift sideways on every tick. */
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+}
+
+.coding-timer svg { width: 13px; height: 13px; }
+
+.coding-timer--muted {
+  color: var(--text-muted);
+  font-weight: 600;
+  border-style: dashed;
+}
+
+.coding-stepper {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.coding-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.coding-stepper-btn:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.coding-stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.coding-stepper-btn svg { width: 14px; height: 14px; }
+
+/* WHY a flipped chevron rather than importing a second icon: FiChevronLeft is
+   already imported by this page, and rotating it avoids another icon in the
+   bundle for a single glyph. */
+.coding-stepper-flip { transform: rotate(180deg); }
+
+.coding-pane--statement {
+  border-right: 1px solid var(--border);
+  background: var(--bg-card);
+  overflow-y: auto;
+}
+
+.coding-pane--editor { background: var(--bg-card); }
+
+/* ─── Statement header ──────────────────────────────────────────────────── */
+.coding-statement-head {
+  padding: 22px 26px 16px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  z-index: 2;
+}
+
+.coding-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-bottom: 10px;
+}
+.coding-back:hover { color: var(--secondary); }
+
+.coding-title {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.25;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.coding-meta-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.coding-points-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(209, 0, 122, 0.12);
+  color: var(--secondary);
+}
+.coding-meta-note { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+
+/* ─── Tabs ──────────────────────────────────────────────────────────────── */
+.coding-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  z-index: 3;
+}
+.coding-statement-head + .coding-tabs { position: sticky; top: 0; }
+
+.coding-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+}
+.coding-tabs button:hover { color: var(--text-primary); }
+.coding-tabs button.is-active { color: var(--secondary); border-bottom-color: var(--secondary); }
+
+.coding-tab-body { padding: 22px 26px 40px; }
+
+.coding-statement {
+  font-size: 0.93rem;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  margin: 0 0 4px;
+}
+
+.coding-io-block {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  background: rgba(0, 35, 102, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 6px;
+  overflow-x: auto;
+}
+.coding-io-block em { color: var(--text-muted); font-style: normal; }
+
+.coding-constraints { margin: 0; padding-left: 20px; }
+.coding-constraints li { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px; }
+.coding-constraints code {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.82rem;
+  background: rgba(0, 35, 102, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.coding-example {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--bg-primary);
+}
+.coding-example-head {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.coding-io-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 8px 0 4px;
+}
+
+.coding-hints { padding-left: 20px; }
+.coding-hints li { font-size: 0.87rem; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.6; }
+
+/* ─── Submissions list ──────────────────────────────────────────────────── */
+.coding-submissions { display: flex; flex-direction: column; gap: 8px; }
+.coding-sub-row {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--verdict, var(--border));
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+.coding-sub-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.84rem;
+  color: var(--verdict, var(--text-primary));
+  text-align: left;
+}
+.coding-sub-summary:hover { background: rgba(108, 99, 255, 0.05); }
+.coding-sub-status { font-weight: 700; }
+.coding-sub-score { font-weight: 700; color: var(--text-primary); }
+.coding-sub-lang {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--text-muted);
+}
+.coding-sub-time { margin-left: auto; font-size: 0.74rem; color: var(--text-muted); }
+.coding-sub-detail { padding: 0 14px 14px; }
+.coding-tool-btn-text { padding: 6px 14px !important; font-size: 0.78rem !important; margin-top: 10px; }
+
+/* ─── Editor header ─────────────────────────────────────────────────────── */
+.coding-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.coding-lang-wrap { position: relative; }
+
+.coding-lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--transition);
+}
+.coding-lang-btn:hover { border-color: var(--secondary); color: var(--secondary); }
+
+.coding-lang-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 190px;
+  list-style: none;
+  margin: 0;
+  padding: 5px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.coding-lang-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 9px 12px;
+  border-radius: 7px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.coding-lang-menu button:hover { background: rgba(108, 99, 255, 0.09); }
+.coding-lang-menu button.is-active { color: var(--secondary); font-weight: 700; }
+
+.coding-editor-tools { display: flex; gap: 7px; }
+
+.coding-starter-badge {
+  --starter-navy: #002366;
+  --starter-deep: #00163D;
+  --starter-blue: #003399;
+  --starter-magenta: #D1007A;
+  --starter-pink: #E6008C;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid rgba(0, 35, 102, 0.2);
+  border-radius: 6px;
+  color: var(--starter-deep);
+  background: rgba(0, 51, 153, 0.06);
+  font-size: 0.72rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+.coding-starter-badge strong { color: var(--starter-blue); font-weight: 700; }
+.coding-starter-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border: 1px solid #94A3B8;
+  border-radius: 50%;
+  background: #E2E8F0;
+}
+.coding-starter-badge.is-modified {
+  border-color: rgba(209, 0, 122, 0.28);
+  background: rgba(230, 0, 140, 0.07);
+}
+.coding-starter-badge.is-modified strong { color: #087443; }
+.coding-starter-badge.is-modified .coding-starter-dot {
+  border-color: #087443;
+  background: #10B981;
+}
+
+.coding-guard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 22, 61, 0.68);
+  backdrop-filter: blur(3px);
+}
+.coding-guard-modal {
+  --guard-navy: #002366;
+  --guard-deep: #00163D;
+  --guard-blue: #003399;
+  --guard-magenta: #D1007A;
+  --guard-pink: #E6008C;
+  width: min(100%, 440px);
+  padding: 26px;
+  border: 1px solid rgba(0, 51, 153, 0.18);
+  border-top: 4px solid var(--guard-magenta);
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 24px 64px rgba(0, 22, 61, 0.32);
+  color: var(--guard-deep);
+  animation: coding-guard-enter 160ms ease-out;
+}
+.coding-guard-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 15px;
+  border-radius: 50%;
+  background: rgba(209, 0, 122, 0.1);
+  color: var(--guard-magenta);
+  font-size: 18px;
+}
+.coding-guard-modal h2 {
+  margin: 0 0 9px;
+  color: var(--guard-navy);
+  font-size: 1.15rem;
+  line-height: 1.35;
+}
+.coding-guard-modal p {
+  margin: 0;
+  color: #334155;
+  font-size: 0.91rem;
+  line-height: 1.6;
+}
+.coding-guard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 24px;
+}
+.coding-guard-actions button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+.coding-guard-actions button:hover { transform: translateY(-1px); }
+.coding-guard-primary {
+  border-color: var(--guard-pink) !important;
+  background: var(--guard-magenta);
+  color: #FFFFFF;
+}
+.coding-guard-primary:hover { background: var(--guard-pink); }
+.coding-guard-secondary {
+  border-color: rgba(0, 51, 153, 0.25) !important;
+  background: #FFFFFF;
+  color: var(--guard-blue);
+}
+.coding-guard-secondary:hover { background: rgba(0, 51, 153, 0.06); }
+@keyframes coding-guard-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 560px) {
+  .coding-editor-tools { align-items: center; }
+  .coding-starter-badge { gap: 4px; padding: 6px 7px; font-size: 0.65rem; }
+  .coding-guard-actions { flex-direction: column-reverse; }
+  .coding-guard-actions button { width: 100%; }
+}
+
+.coding-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.coding-tool-btn:hover { color: var(--secondary); border-color: var(--secondary); }
+.coding-tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Editor / console split ────────────────────────────────────────────── */
+.coding-editor-body {
+  flex: 1 1 auto;
+  min-height: 250px;
+  min-width: 0;
+  position: relative;
+}
+
+.coding-editor-resize-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 18px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  transition: color 140ms ease, background 140ms ease;
+}
+.coding-editor-resize-handle:hover,
+.coding-editor-resize-handle.is-active {
+  background: rgba(209, 0, 122, 0.08);
+  color: var(--secondary);
+}
+.coding-editor-resize-handle span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.coding-console-shell {
+  flex: 0 0 auto;
+  min-height: 120px;
+  max-height: 60%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.coding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-wrap: wrap;
+}
+.coding-case-summary { font-size: 0.8rem; color: var(--text-secondary); font-weight: 500; }
+.coding-action-buttons { display: flex; gap: 10px; }
+.coding-action-buttons button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.coding-locked-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  background: rgba(245, 158, 11, 0.13);
+  color: #B45309;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+[data-theme='dark'] .coding-locked-note { color: #FBBF24; }
+
+.coding-sandbox-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 14px;
+  background: rgba(245, 158, 11, 0.13);
+  border-top: 1px solid rgba(245, 158, 11, 0.35);
+  color: #B45309;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+[data-theme='dark'] .coding-sandbox-warning { color: #FBBF24; }
+
+/* ─── Verdict banner ────────────────────────────────────────────────────── */
+.coding-verdict {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--verdict) 12%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--verdict) 40%, transparent);
+  color: var(--verdict);
+  animation: slide-in 0.25s ease;
+}
+.coding-verdict-icon { font-size: 1.25rem; flex-shrink: 0; }
+.coding-verdict-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.coding-verdict-main strong { font-size: 0.88rem; font-weight: 700; }
+.coding-verdict-main span { font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; }
+/* WHY a <button> and not the <Link> this replaced: "Next problem" has to be
+   suppressed when the student is on the last problem, and a Link that always
+   renders would send them back to the catalogue instead. */
+.coding-verdict-next {
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 1px solid var(--verdict);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--verdict);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.coding-verdict-next:hover { background: color-mix(in srgb, var(--verdict) 14%, transparent); }
+
+/* ─── Execution console ─────────────────────────────────────────────────── */
+.code-console {
+  border-top: 1px solid var(--border);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: none;
+  flex-shrink: 0;
+}
+.code-console-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.code-console-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+.code-console-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.code-console-status--running { color: var(--text-muted); }
+.code-console-time { margin-left: auto; font-size: 0.74rem; color: var(--text-muted); }
+
+.code-console-tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); }
+.code-console-tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.code-console-tabs button.is-active { color: var(--secondary); border-bottom-color: var(--secondary); }
+
+.code-console-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 12px 14px;
+  overflow: auto;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+.code-console-body--placeholder {
+  color: var(--text-muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.84rem;
+}
+.console-stdout, .console-stderr { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.console-stderr { color: var(--danger); }
+
+.console-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--border);
+  border-top-color: var(--secondary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ─── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  /* WHY stack instead of shrink: two Monaco/textarea panes below ~520px each are
+     unreadable, and a horizontally scrolling split is worse than a stack. */
+  .coding-workspace { grid-template-columns: 1fr; height: auto; }
+  .coding-pane--statement { border-right: none; border-bottom: 1px solid var(--border); max-height: none; }
+  .coding-pane--editor { min-height: 70dvh; }
+  .coding-statement-head { position: static; }
+
+  /* WHY the rail has to be re-declared here: it is a flex child with a fixed
+     264px basis, and once the workspace becomes a single column that basis would
+     squeeze the stacked panes. Laid out as a full-width band with a capped
+     height, it reads as a breadcrumb strip above the statement. */
+  .pn {
+    width: 100%;
+    flex: none;
+    height: auto;
+    max-height: 260px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .pn--collapsed {
+    width: 100%;
+    max-height: none;
+    flex-direction: row;
+    justify-content: center;
+    padding: 8px;
+  }
+  /* Horizontal text: the counter was vertical for the 44px side rail, which is
+     meaningless once the rail spans the full width. */
+  .pn-collapsed-count { writing-mode: horizontal-tb; }
+  .pn-legend { display: none; }
+}
+@media (max-width: 560px) {
+  .coding-statement-head, .coding-tab-body { padding-left: 16px; padding-right: 16px; }
+  .coding-action-buttons { width: 100%; }
+  .coding-action-buttons button { flex: 1; justify-content: center; }
+  .coding-sub-time { display: none; }
+  .coding-stepper-btn { flex: 1; justify-content: center; }
+}

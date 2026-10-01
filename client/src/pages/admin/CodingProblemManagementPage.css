@@ -1,0 +1,137 @@
+/* Admin coding problem management — page-specific layer. */
+@import '../student/coding-shared.css';
+
+.coding-form-card { margin-bottom: 26px; overflow: hidden; }
+
+/* Keep the action heading and controls aligned to the middle of their column. */
+.coding-table th.coding-actions-head,
+.coding-table td.coding-actions-cell {
+  text-align: center !important;
+  padding: 0 !important;
+}
+.coding-table td.coding-actions-cell .question-actions-cell {
+  width: 100%;
+  justify-content: center !important;
+}
+.coding-table th.coding-title-head {
+  text-align: center !important;
+  padding-left: 0 !important;
+}
+
+.coding-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.coding-form-head h2 { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+
+.coding-tabs--form { background: var(--bg-primary); }
+.coding-tabs--form button { padding: 11px 16px; }
+
+.coding-form-body { padding: 20px; }
+
+.coding-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.coding-field { min-width: 0; }
+.coding-field--wide { grid-column: 1 / -1; }
+
+.coding-textarea { resize: vertical; line-height: 1.55; min-height: 70px; }
+/* WHY a monospace font for source: indentation is semantic in code, and a
+   proportional font makes a 4-space indent visually indistinguishable from 1. */
+.coding-code-input {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  background: #0B1424;
+  color: #E2E8F0;
+  border-color: #1E293B !important;
+}
+.coding-code-input:focus { box-shadow: 0 0 0 3px rgba(230, 0, 140, 0.25) !important; }
+
+.coding-tests { display: flex; flex-direction: column; gap: 14px; }
+
+.coding-test-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+}
+.coding-test-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  padding-top: 26px;
+}
+
+.coding-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.coding-checkbox input { width: 16px; height: 16px; accent-color: var(--secondary); cursor: pointer; }
+
+.coding-inline-note {
+  padding: 11px 14px;
+  border-radius: var(--radius);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #B45309;
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+[data-theme='dark'] .coding-inline-note { color: #FBBF24; }
+
+.coding-form-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 15px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-primary);
+}
+
+.coding-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background: rgba(4, 8, 16, 0.6);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.coding-modal {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 0 0;
+  overflow: hidden;
+}
+.coding-modal > *:not(.coding-form-head) { margin: 0 20px; }
+.coding-modal > .coding-form-foot { margin: 0; }
+
+@media (max-width: 820px) {
+  .coding-form-grid { grid-template-columns: 1fr; }
+  .coding-test-row { grid-template-columns: 1fr; }
+  .coding-test-meta { flex-direction: row; align-items: center; justify-content: space-between; padding-top: 0; }
+}

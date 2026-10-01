@@ -1,175 +1,360 @@
 import asyncHandler from 'express-async-handler';
-import Assessment from '../models/Assessment.js';
 import User from '../models/User.js';
-import Question from '../models/Question.js';
+import CodingProblem from '../models/CodingProblem.js';
+import CodingSubmission from '../models/CodingSubmission.js';
 import { Parser } from 'json2csv';
+import { getCache, setCache, deleteCachePattern } from '../utils/cache.js';
 
-// @desc    Get admin dashboard stats
+/**
+ * SYNEXIA - Admin controller
+ *
+ * WHY this file no longer mentions Assessment or Question:
+ * the MCQ module (models/Assessment.js, models/Question.js and their controllers)
+ * has been removed. This controller still exists because "User Management" and
+ * the "Admin Panel" are kept features — they just aggregate the CODING
+ * collections now. Every field below is sourced from CodingProblem or
+ * CodingSubmission; nothing is invented in the client.
+ *
+ * One deliberate semantic change: the old `passRate` metric meant "share of
+ * students who scored >= 40% on an MCQ paper". There is no equivalent here,
+ * because coding has no single graded attempt per student. `acceptanceRate` is
+ * the honest analogue — the share of SUBMISSIONS that the judge accepted.
+ */
+
+// ─── Cache TTLs ───────────────────────────────────────────────────────────────
+const STATS_TTL = 120;       // 2 minutes — stats tolerate slight staleness
+const TRENDS_TTL = 300;      // 5 minutes — trends change infrequently
+
+/**
+ * Shared per-student coding rollup.
+ *
+ * WHY one aggregation instead of a per-student query: the previous version ran
+ * Assessment.aggregate() once per student, so a 15-row page cost 16 DB round
+ * trips and a 500-student page cost 501. Grouping by userId in a single pass is
+ * always 1 query regardless of page size.
+ *
+ * WHY `$addToSet` + `$size` for problemsSolved: re-submitting a solved problem
+ * must still read as 1 problem solved, exactly like the per-student stats
+ * endpoint. Summing submission rows would inflate it.
+ *
+ * WHY `bestScore` is a $max and not a $sum: the leaderboard ranks students by
+ * total points across DISTINCT solved problems (see codingLeaderboardService),
+ * so the admin "best score" column must use the same definition or the two
+ * screens will disagree.
+ */
+const studentCodingRollup = (userIds) =>
+  CodingSubmission.aggregate([
+    { $match: { isRun: false, ...(userIds ? { userId: { $in: userIds } } : {}) } },
+    {
+      $group: {
+        _id: '$userId',
+        attempts: { $sum: 1 },
+        acceptedSubmissions: {
+          $sum: { $cond: [{ $eq: ['$status', 'accepted'] }, 1, 0] },
+        },
+        bestScore: { $max: '$score' },
+        solvedProblemIds: {
+          $addToSet: {
+            $cond: [{ $eq: ['$status', 'accepted'] }, '$problemId', '$$REMOVE'],
+          },
+        },
+        lastActive: { $max: '$submittedAt' },
+      },
+    },
+    {
+      $project: {
+        attempts: 1,
+        acceptedSubmissions: 1,
+        bestScore: 1,
+        lastActive: 1,
+        problemsSolved: { $size: '$solvedProblemIds' },
+      },
+    },
+  ]);
+
+/** Shape a rollup row for the UI, tolerating a student with no submissions. */
+const EMPTY_CODING_STATS = {
+  attempts: 0,
+  acceptedSubmissions: 0,
+  problemsSolved: 0,
+  bestScore: 0,
+  lastActive: null,
+};
+
+const rollupByUserId = (rows) => {
+  const map = {};
+  rows.forEach((r) => {
+    map[String(r._id)] = r;
+  });
+  return map;
+};
+
+// @desc    Admin dashboard stats
 // @route   GET /api/admin/stats
 // @access  Admin
 export const getStats = asyncHandler(async (req, res) => {
-  const [totalStudents, totalAssessments, totalQuestions, avgScoreResult] = await Promise.all([
-    User.countDocuments({ role: 'student' }),
-    Assessment.countDocuments({ status: { $ne: 'in-progress' } }),
-    Question.countDocuments(),
-    Assessment.aggregate([
-      { $match: { status: { $ne: 'in-progress' } } },
-      { $group: { _id: null, avg: { $avg: '$percentage' } } },
-    ]),
-  ]);
+  const cacheKey = 'admin:stats';
+  const cached = await getCache(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, data: cached });
 
-  const avgScore = avgScoreResult[0]?.avg ? Math.round(avgScoreResult[0].avg) : 0;
+  const [totalStudents, totalProblems, activeProblems, totalSubmissions, acceptedSubmissions, studentCountAgg] =
+    await Promise.all([
+      User.countDocuments({ role: 'student' }),
+      CodingProblem.countDocuments(),
+      CodingProblem.countDocuments({ isActive: true }),
+      CodingSubmission.countDocuments({ isRun: false }),
+      CodingSubmission.countDocuments({ isRun: false, status: 'accepted' }),
+      // "active" here means "has submitted coding work at least once", which is
+      // the useful admin signal. The old MCQ version counted anyone who had
+      // started an attempt and abandoned it.
+      CodingSubmission.distinct('userId', { isRun: false }),
+    ]);
 
-  // Pass rate (>= 40%)
-  const [passed, total] = await Promise.all([
-    Assessment.countDocuments({ status: { $ne: 'in-progress' }, percentage: { $gte: 40 } }),
-    Assessment.countDocuments({ status: { $ne: 'in-progress' } }),
-  ]);
-  const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const data = {
+    totalStudents,
+    activeStudents: studentCountAgg.length,
+    totalProblems,
+    activeProblems,
+    totalSubmissions,
+    acceptedSubmissions,
+    acceptanceRate: totalSubmissions ? Math.round((acceptedSubmissions / totalSubmissions) * 1000) / 10 : 0,
+    // Kept as a distinct key so the dashboard can show a "graded" figure without
+    // another round trip: submissions that produced an actual score.
+    gradedSubmissions: totalSubmissions,
+  };
 
-  res.json({ success: true, data: { totalStudents, totalAssessments, totalQuestions, avgScore, passRate } });
+  await setCache(cacheKey, data, STATS_TTL);
+  res.json({ success: true, cached: false, data });
 });
 
-// @desc    Get language popularity stats
+// @desc    Language popularity + per-language acceptance
 // @route   GET /api/admin/language-stats
 // @access  Admin
 export const getLanguageStats = asyncHandler(async (req, res) => {
-  const stats = await Assessment.aggregate([
-    { $match: { status: { $ne: 'in-progress' } } },
-    { $group: { _id: '$language', count: { $sum: 1 }, avgScore: { $avg: '$percentage' } } },
-    { $sort: { count: -1 } },
+  const cacheKey = 'admin:langstats';
+  const cached = await getCache(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, data: cached });
+
+  // WHY successRate is a computed field rather than $avg of `accuracy`:
+  // `accuracy` on a submission is the fraction of THAT attempt's test cases
+  // that passed, so averaging it gives "average partial progress", which is not
+  // what an admin asking "which language do people actually solve in" wants.
+  const rows = await CodingSubmission.aggregate([
+    { $match: { isRun: false } },
+    {
+      $group: {
+        _id: '$language',
+        submissions: { $sum: 1 },
+        accepted: { $sum: { $cond: [{ $eq: ['$status', 'accepted'] }, 1, 0] } },
+        solvers: { $addToSet: '$userId' },
+      },
+    },
+    { $sort: { submissions: -1 } },
+    {
+      $project: {
+        _id: 0,
+        language: '$_id',
+        submissions: 1,
+        accepted: 1,
+        uniqueSolvers: { $size: '$solvers' },
+        successRate: {
+          $round: [
+            { $multiply: [{ $divide: ['$accepted', { $max: ['$submissions', 1] }] }, 100] },
+            1,
+          ],
+        },
+      },
+    },
   ]);
-  res.json({ success: true, data: stats });
+
+  await setCache(cacheKey, rows, STATS_TTL);
+  res.json({ success: true, cached: false, data: rows });
 });
 
-// @desc    Get all students with their stats
+// @desc    All students with their coding stats
 // @route   GET /api/admin/students
 // @access  Admin
 export const getStudents = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 20 } = req.query;
   const filter = { role: 'student' };
-  if (search) filter.$or = [
-    { name: { $regex: search, $options: 'i' } },
-    { email: { $regex: search, $options: 'i' } },
-    { college: { $regex: search, $options: 'i' } },
-  ];
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const total = await User.countDocuments(filter);
-  const students = await User.find(filter).select('-password').skip(skip).limit(parseInt(limit)).sort({ createdAt: -1 });
+  if (typeof search === 'string' && search.trim()) {
+    // Escape the input before building a $regex: an unescaped search string is a
+    // ReDoS vector and would also throw on invalid patterns like "a(". The old
+    // code interpolated it raw.
+    const safe = search.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+    filter.$or = [
+      { name: { $regex: safe, $options: 'i' } },
+      { email: { $regex: safe, $options: 'i' } },
+      { college: { $regex: safe, $options: 'i' } },
+    ];
+  }
 
-  // Enrich with assessment count and best score
-  const enriched = await Promise.all(
-    students.map(async (s) => {
-      const stats = await Assessment.aggregate([
-        { $match: { userId: s._id, status: { $ne: 'in-progress' } } },
-        { $group: { _id: null, attempts: { $sum: 1 }, bestScore: { $max: '$score' }, bestPct: { $max: '$percentage' } } },
-      ]);
-      return { ...s.toObject(), assessmentStats: stats[0] || { attempts: 0, bestScore: 0, bestPct: 0 } };
-    })
-  );
+  const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+  const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const skip = (parsedPage - 1) * parsedLimit;
 
-  res.json({ success: true, total, data: enriched });
+  const [total, students] = await Promise.all([
+    User.countDocuments(filter),
+    User.find(filter)
+      .select('-password')
+      .skip(skip)
+      .limit(parsedLimit)
+      .sort({ createdAt: -1 })
+      .lean(),
+  ]);
+
+  // Scoped to exactly the students on this page — one grouped aggregation, so
+  // the endpoint stays at 2 DB calls total regardless of page size.
+  const scoped = students.length ? await studentCodingRollup(students.map((s) => s._id)) : [];
+
+  const statsMap = rollupByUserId(scoped);
+
+  const enriched = students.map((s) => ({
+    ...s,
+    // Named `codingStats` rather than the old `assessmentStats`: the client
+    // renders these on the coding drill-down, and keeping the MCQ name would
+    // imply an MCQ meaning that no longer exists.
+    codingStats: statsMap[String(s._id)] || EMPTY_CODING_STATS,
+  }));
+
+  res.json({
+    success: true,
+    total,
+    page: parsedPage,
+    limit: parsedLimit,
+    data: enriched,
+  });
 });
 
-// @desc    Export students as CSV
+// @desc    Export students with coding stats as CSV
 // @route   GET /api/admin/export-students
 // @access  Admin
 export const exportStudents = asyncHandler(async (req, res) => {
-  const students = await User.find({ role: 'student' }).select('-password').lean();
-  const assessments = await Assessment.aggregate([
-    { $match: { status: { $ne: 'in-progress' } } },
-    { $group: { _id: '$userId', attempts: { $sum: 1 }, bestScore: { $max: '$score' }, bestPct: { $max: '$percentage' } } },
-  ]);
-  const assessmentMap = {};
-  assessments.forEach((a) => (assessmentMap[a._id.toString()] = a));
+  // Pages through students so a large roster cannot spike memory.
+  const PAGE_SIZE = 500;
+  let page = 0;
+  const allData = [];
 
-  const data = students.map((s) => {
-    const aStats = assessmentMap[s._id.toString()] || {};
-    return {
-      Name: s.name, Email: s.email, College: s.college, RollNumber: s.rollNumber,
-      Attempts: aStats.attempts || 0, BestScore: aStats.bestScore || 0, BestPercentage: aStats.bestPct || 0,
-      JoinedAt: s.createdAt,
-    };
-  });
+  for (;;) {
+    const students = await User.find({ role: 'student' })
+      .select('-password')
+      .lean()
+      .skip(page * PAGE_SIZE)
+      .limit(PAGE_SIZE);
+
+    if (students.length === 0) break;
+
+    const ids = students.map((s) => s._id);
+    const rows = await studentCodingRollup(ids);
+    const map = rollupByUserId(rows);
+
+    students.forEach((s) => {
+      const c = map[String(s._id)] || EMPTY_CODING_STATS;
+      allData.push({
+        Name: s.name,
+        Email: s.email,
+        College: s.college,
+        RollNumber: s.rollNumber,
+        ProblemsSolved: c.problemsSolved,
+        Submissions: c.attempts,
+        Accepted: c.acceptedSubmissions,
+        BestScore: c.bestScore,
+        LastActive: c.lastActive,
+        JoinedAt: s.createdAt,
+      });
+    });
+
+    page += 1;
+  }
 
   const parser = new Parser();
-  const csv = parser.parse(data);
+  const csv = parser.parse(allData);
   res.header('Content-Type', 'text/csv');
-  res.attachment('techiz_students.csv');
+  // Renamed from techiz_students.csv to match the SYNEXIA branding the rest of
+  // the app was migrated to.
+  res.attachment('synexia_students.csv');
   res.send(csv);
 });
 
-// @desc    Get monthly attempt trends
+// @desc    Monthly coding submission trends
 // @route   GET /api/admin/trends
 // @access  Admin
 export const getTrends = asyncHandler(async (req, res) => {
-  const trends = await Assessment.aggregate([
-    { $match: { status: { $ne: 'in-progress' }, completedAt: { $type: 'date' } } },
+  const cacheKey = 'admin:trends';
+  const cached = await getCache(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, data: cached });
+
+  const trends = await CodingSubmission.aggregate([
+    { $match: { isRun: false, submittedAt: { $type: 'date' } } },
     {
       $group: {
-        _id: { year: { $year: '$completedAt' }, month: { $month: '$completedAt' } },
-        count: { $sum: 1 },
-        avgScore: { $avg: '$percentage' },
+        _id: { year: { $year: '$submittedAt' }, month: { $month: '$submittedAt' } },
+        submissions: { $sum: 1 },
+        accepted: { $sum: { $cond: [{ $eq: ['$status', 'accepted'] }, 1, 0] } },
+        avgScore: { $avg: '$score' },
       },
     },
     { $sort: { '_id.year': 1, '_id.month': 1 } },
     { $limit: 12 },
-  ]);
-  res.json({ success: true, data: trends });
-});
-
-// @desc    Update student assessment marks
-// @route   PUT /api/admin/assessment/:assessmentId/marks
-// @access  Admin
-export const updateAssessmentMarks = asyncHandler(async (req, res) => {
-  const { score, maxScore } = req.body;
-
-  if (score === undefined || maxScore === undefined) {
-    res.status(400);
-    throw new Error('Score and maxScore are required');
-  }
-
-  if (score < 0 || maxScore < 0 || score > maxScore) {
-    res.status(400);
-    throw new Error('Invalid score values');
-  }
-
-  const assessment = await Assessment.findById(req.params.assessmentId);
-  if (!assessment) {
-    res.status(404);
-    throw new Error('Assessment not found');
-  }
-
-  const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
-
-  assessment.score = score;
-  assessment.maxScore = maxScore;
-  assessment.percentage = percentage;
-  await assessment.save();
-
-  res.json({
-    success: true,
-    data: {
-      assessmentId: assessment._id,
-      score,
-      maxScore,
-      percentage,
-      message: 'Marks updated successfully',
+    {
+      $project: {
+        _id: 1,
+        submissions: 1,
+        accepted: 1,
+        avgScore: { $round: ['$avgScore', 1] },
+        acceptanceRate: {
+          $round: [
+            { $multiply: [{ $divide: ['$accepted', { $max: ['$submissions', 1] }] }, 100] },
+            1,
+          ],
+        },
+      },
     },
-  });
+  ]);
+
+  await setCache(cacheKey, trends, TRENDS_TTL);
+  res.json({ success: true, cached: false, data: trends });
 });
 
-// @desc    Get student assessments for admin
-// @route   GET /api/admin/students/:studentId/assessments
-// @access  Admin
-export const getStudentAssessments = asyncHandler(async (req, res) => {
-  const assessments = await Assessment.find({
-    userId: req.params.studentId,
-    status: { $ne: 'in-progress' },
-  })
-    .select('language score maxScore percentage status completedAt')
-    .sort({ completedAt: -1 });
+/**
+ * @desc    A single student's coding submissions
+ * @route   GET /api/admin/students/:studentId/submissions
+ * @access  Admin
+ *
+ * WHY this is here rather than reusing /api/coding/admin/students/:studentId:
+ * that endpoint returns an aggregate *report* (score, rank, per-problem status)
+ * for the coding report view. This one returns the raw, paginated submission
+ * rows so the admin can see the actual attempt history, which is the direct
+ * replacement for the old "view assessments" modal.
+ */
+export const getStudentSubmissions = asyncHandler(async (req, res) => {
+  const { studentId } = req.params;
+  const { limit = 25, status } = req.query;
 
-  res.json({ success: true, data: assessments });
+  const filter = { userId: studentId, isRun: false };
+  if (typeof status === 'string' && status && status !== 'all') {
+    filter.status = status;
+  }
+
+  const [student, total, submissions] = await Promise.all([
+    User.findById(studentId).select('name email college rollNumber role').lean(),
+    CodingSubmission.countDocuments(filter),
+    CodingSubmission.find(filter)
+      .populate('problemId', 'title slug difficulty points')
+      // `code` is intentionally excluded: the admin drill-down shows the verdict
+      // and score, and shipping every student's source to the admin table is an
+      // unnecessary data exposure.
+      .select('-code')
+      .sort({ submittedAt: -1 })
+      .limit(Math.min(100, Math.max(1, parseInt(limit, 10) || 25)))
+      .lean(),
+  ]);
+
+  if (!student || student.role !== 'student') {
+    res.status(404);
+    throw new Error('Student not found');
+  }
+
+  res.json({ success: true, total, student, data: submissions });
 });

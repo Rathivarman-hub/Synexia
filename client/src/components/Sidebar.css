@@ -1,0 +1,89 @@
+/* ============================================
+   SYNEXIA — SIDEBAR
+   ============================================ */
+.app-sidebar {
+  width: 260px;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.sidebar-brand {
+  padding: 22px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.sidebar-brand a {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  text-decoration: none;
+}
+
+.sidebar-logo {
+  width: 115px;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.sidebar-nav {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  height: 48px;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.sidebar-link.active {
+  background: linear-gradient(90deg, rgba(209, 0, 122, 0.15) 0%, rgba(0, 35, 102, 0.05) 100%);
+  color: #fff;
+  border-left: 3px solid var(--secondary);
+}
+
+.sidebar-link.active .sidebar-icon {
+  color: var(--secondary);
+}
+
+.sidebar-icon {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  width: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.sidebar-link:hover .sidebar-icon {
+  color: #fff;
+}
