@@ -1,23 +1,7 @@
 import { runBatch } from './codeExecutionService.js';
 
-// ─── Coding Module · Grading Service ───────────────────────────────────────────
-// WHY: Output comparison is the single place where a platform decides whether a
-// student is right or wrong. LeetCode-style graders compare *whitespace-token
-// sequences*, not bytes: "1 2 3" and "1  2\n3\n" are the same answer. Getting
-// this wrong produces the worst class of bug in a coding judge — real solutions
-// marked wrong because of trailing whitespace.
-// WHY one regex and not a chain of replaces: JS `\s` already matches spaces,
-// tabs, LF, CR and CRLF, so collapsing every whitespace run to a single space
-// normalises line endings, indentation and trailing newlines in a single pass.
-// That is the whole reason a correct solution must never be marked wrong just
-// because it printed "1 2 3\n" instead of "1 2 3".
 const WHITESPACE_RUN = /\s+/g;
 
-/**
- * Canonicalise a program's stdout for comparison.
- * 1. collapse every internal whitespace run (incl. CRLF) to a single space
- * 2. trim leading/trailing whitespace
- */
 export const normalizeOutput = (value) => {
   if (value === null || value === undefined) return '';
   return String(value).replace(WHITESPACE_RUN, ' ').trim();

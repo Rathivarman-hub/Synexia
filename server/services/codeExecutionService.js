@@ -2,17 +2,6 @@ import axios from 'axios';
 import logger from '../config/logger.js';
 import { getLanguage, LANGUAGE_KEYS } from '../config/languages.js';
 
-// ─── Coding Module · Code Execution Service ───────────────────────────────────
-// WHY: User-submitted source NEVER touches this process. It is forwarded to an
-// isolated third-party sandbox (Judge0 or Piston) that owns the compilers and
-// the kernel-level containment. This service is deliberately a thin, well-tested
-// adapter: provider quirks, auth, base64 transport, timeouts, output caps and
-// status normalisation all live here so controllers stay free of vendor detail.
-//
-// Provider is selected by CODE_EXECUTION_PROVIDER = judge0 | piston.
-// If it is unset or unknown the module reports "unconfigured" instead of
-// throwing, so the rest of the platform (and the UI) still boots cleanly.
-
 const PROVIDER = (process.env.CODE_EXECUTION_PROVIDER || 'piston').trim().toLowerCase();
 const SUPPORTED_PROVIDERS = ['judge0', 'piston'];
 const PISTON_DEFAULT_URL = 'https://emkc.org/api/v2/piston';

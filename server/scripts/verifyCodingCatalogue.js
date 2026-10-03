@@ -1,19 +1,3 @@
-/**
- * SYNEXIA - Coding catalogue verification (dev-only, not shipped to production)
- *
- * Run with:  node scripts/verifyCodingCatalogue.js
- *
- * WHY this exists: a wrong `expectedOutput` in the catalogue is a silent,
- * platform-wide bug. Every student who submits a CORRECT solution to that problem
- * gets "Wrong Answer" forever, and nothing in the stack trace points at the data.
- * This script executes a reference solution for each of the 8 problems against
- * every sample AND hidden test case and fails loudly on any mismatch.
- *
- * Reference solutions are written in plain JavaScript because Node is the only
- * runtime guaranteed to exist in this repo. They are intentionally the most
- * naive correct implementation - that is what makes them a valid oracle.
- */
-
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';

@@ -1,23 +1,6 @@
 import mongoose from 'mongoose';
 import CodingSubmission from '../models/CodingSubmission.js';
 
-// ─── Coding Module · Leaderboard Service ──────────────────────────────────────
-// WHY: The "Total Coding Score / Problems Solved / Accuracy" triple is derived
-// data that three different endpoints need (leaderboard page, my-rank endpoint,
-// dashboard cards). Duplicating the pipeline in each would let the three drift
-// and show three different numbers for the same student. One pipeline, one source
-// of truth.
-//
-// The pipeline:
-//   1. drop non-submit runs and non-positive scores (they contribute nothing)
-//   2. sort by (user, problem, score desc)  → so $group $first is the BEST attempt
-//   3. $group by (userId, problemId)        → one row per solved-or-attempted problem
-//   4. $group by userId                     → totals, solved count, accuracy
-//   5. $lookup users for display name/college/avatar
-//
-// WHY step 2 matters: without it, "best score per problem" would be arbitrary and
-// the leaderboard would reward spamming submissions rather than solving well.
-
 const bestAttemptPipeline = () => [
   { $match: { isRun: false, score: { $gt: 0 } } },
   { $sort: { userId: 1, problemId: 1, score: -1, submittedAt: -1 } },
@@ -57,11 +40,6 @@ const userTotalsPipeline = () => [
     $group: {
       _id: '$userId',
       totalScore: { $sum: '$score' },
-      // A problem counts as solved only on a fully accepted submission. Because
-      // step 1 of the pipeline drops score-0 rows and step 2 ranks by score, the
-      // best attempt for a problem is its best scoring one — so summing
-      // "attempts" over problems where score === maxScore is equivalent to
-      // counting accepted problems, without a second status lookup.
       problemsSolved: { $sum: { $cond: [{ $eq: ['$score', '$maxScore'] }, 1, 0] } },
       problemsAttempted: { $sum: 1 },
       passedCases: { $sum: '$passedCases' },
@@ -73,9 +51,6 @@ const userTotalsPipeline = () => [
   {
     $project: {
       _id: 0,
-      // WHY: rename the group key back to `userId` here so every downstream
-      // stage ($lookup, $sort, the aheadPredicate) can use one uniform field name
-      // instead of remembering which stage renamed it.
       userId: '$_id',
       totalScore: 1,
       problemsSolved: 1,
