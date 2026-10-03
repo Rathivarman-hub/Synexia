@@ -13,6 +13,7 @@ import mongoose from 'mongoose';
 import connectDB from './config/db.js';
 import { connectRedis, isRedisConnected } from './config/redis.js';
 import logger from './config/logger.js';
+import { seedCodingProblems } from './services/codingProblemSeeder.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { generalLimiter, authLimiter, adminLimiter } from './middleware/rateLimiter.js';
 
@@ -114,6 +115,7 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   await connectDB();
+  await seedCodingProblems({ preserveExisting: true });
   await connectRedis();
 
   const server = app.listen(PORT, () =>
@@ -139,4 +141,7 @@ const startServer = async () => {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 };
 
-startServer();
+startServer().catch((err) => {
+  logger.error('Server startup failed', { message: err.message, stack: err.stack });
+  process.exit(1);
+});
