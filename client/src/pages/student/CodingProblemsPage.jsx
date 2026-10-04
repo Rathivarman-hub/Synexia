@@ -58,7 +58,6 @@ const CodingProblemsPage = () => {
   useEffect(() => { setPage(1); }, [debouncedSearch, difficulty, sortBy, sortOrder]);
 
   const fetchProblems = useCallback(async () => {
-    if (!assessmentStarted) return;
     setLoading(true);
     setError('');
     try {
@@ -77,7 +76,7 @@ const CodingProblemsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, difficulty, sortBy, sortOrder, assessmentStarted]);
+  }, [page, debouncedSearch, difficulty, sortBy, sortOrder]);
 
   // ─── Fullscreen ref ─────────────────────────────────────────────────────────
   const pageRef = useRef(null);
@@ -104,8 +103,10 @@ const CodingProblemsPage = () => {
     };
   }, [problems]);
 
+  const showLandingScreen = !assessmentStarted && problems.length === 0;
+
   // ─── Landing screen ─────────────────────────────────────────────────────────
-  if (!assessmentStarted) {
+  if (showLandingScreen) {
     return (
       <div className="coding-list-page" ref={pageRef}>
         <div className="coding-page-hero">

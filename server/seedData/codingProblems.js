@@ -425,7 +425,7 @@ func main() {
 const reverseAnInteger = {
   title: 'Reverse Integer',
   slug: 'reverse-an-integer',
-  difficulty: 'medium',
+  difficulty: 'easy',
   points: 10,
   category: 'math',
   tags: ['math', 'digits'],
@@ -449,8 +449,13 @@ const reverseAnInteger = {
 
 
 def reverse_number(n):
-    # Write Logic Here
-    pass
+    reversed_value = 0
+    while n > 0:
+        digit = n % 10
+        reversed_value = reversed_value * 10 + digit
+        n //= 10
+    # Missing Line
+    return reversed_value
 
 
 def solve():
@@ -470,8 +475,14 @@ import java.util.*;
 
 public class Main {
     static int reverseNumber(int n) {
-        // Write Logic Here
-        return 0;
+        int reversed = 0;
+        while (n > 0) {
+            int digit = n % 10;
+            reversed = reversed * 10 + digit;
+            n /= 10;
+        }
+        // Missing Line
+        return reversed;
     }
 
     public static void main(String[] args) throws IOException {
@@ -487,8 +498,14 @@ public class Main {
     javascript: String.raw`const fs = require('fs');
 
 function reverseNumber(n) {
-  // Write Logic Here
-  return 0;
+  let reversed = 0;
+  while (n > 0) {
+    const digit = n % 10;
+    reversed = reversed * 10 + digit;
+    n = Math.trunc(n / 10);
+  }
+  // Missing Line
+  return reversed;
 }
 
 function solve() {
@@ -503,8 +520,14 @@ solve();
     c: String.raw`#include <stdio.h>
 
 int reverseNumber(int n) {
-    // Write Logic Here
-    return 0;
+    int reversed = 0;
+    while (n > 0) {
+        int digit = n % 10;
+        reversed = reversed * 10 + digit;
+        n /= 10;
+    }
+    // Missing Line
+    return reversed;
 }
 
 int main(void) {
@@ -519,8 +542,14 @@ int main(void) {
 using namespace std;
 
 int reverseNumber(int n) {
-    // Write Logic Here
-    return 0;
+    int reversed = 0;
+    while (n > 0) {
+        int digit = n % 10;
+        reversed = reversed * 10 + digit;
+        n /= 10;
+    }
+    // Missing Line
+    return reversed;
 }
 
 int main() {
@@ -538,8 +567,14 @@ int main() {
 
 class Program {
     static int ReverseNumber(int n) {
-        // Write Logic Here
-        return 0;
+        int reversed = 0;
+        while (n > 0) {
+            int digit = n % 10;
+            reversed = reversed * 10 + digit;
+            n /= 10;
+        }
+        // Missing Line
+        return reversed;
     }
 
     static void Main() {
@@ -561,8 +596,14 @@ import (
 )
 
 func reverseNumber(n int) int {
-	// Write Logic Here
-	return 0
+	reversed := 0
+	for n > 0 {
+		digit := n % 10
+		reversed = reversed*10 + digit
+		n /= 10
+	}
+	// Missing Line
+	return reversed
 }
 
 func main() {
@@ -600,7 +641,7 @@ func main() {
 // ─────────────────────────────────────────────────────────────────────────────
 const checkPalindromeNumber = {
   title: 'Check Palindrome Number',
-  difficulty: 'medium',
+  difficulty: 'easy',
   points: 12,
   category: 'math',
   tags: ['math', 'two-pointers', 'strings'],
@@ -624,8 +665,16 @@ const checkPalindromeNumber = {
 
 
 def is_palindrome(x):
-    # Write Logic Here
-    pass
+    if x < 0:
+        return False
+
+    original = x
+    reversed_num = 0
+    while x > 0:
+        reversed_num = reversed_num * 10 + x % 10
+        x //= 10
+    # Missing Line
+    return original == reversed_num
 
 
 def solve():
@@ -645,8 +694,16 @@ import java.util.*;
 
 public class Main {
     static boolean isPalindrome(int n) {
-        // Write Logic Here
-        return false;
+        if (n < 0) return false;
+
+        int original = n;
+        int reversed = 0;
+        while (n > 0) {
+            reversed = reversed * 10 + (n % 10);
+            n /= 10;
+        }
+        // Missing Line
+        return original == reversed;
     }
 
     public static void main(String[] args) throws IOException {
@@ -662,8 +719,17 @@ public class Main {
     javascript: String.raw`const fs = require('fs');
 
 function isPalindrome(x) {
-  // Write Logic Here
-  return false;
+  if (x < 0) return false;
+
+  const original = x;
+  let reversed = 0;
+  let current = x;
+  while (current > 0) {
+    reversed = reversed * 10 + (current % 10);
+    current = Math.trunc(current / 10);
+  }
+  // Missing Line
+  return original === reversed;
 }
 
 function solve() {
@@ -678,8 +744,16 @@ solve();
     c: String.raw`#include <stdio.h>
 
 int isPalindrome(int n) {
-    // Write Logic Here
-    return 0;
+    if (n < 0) return 0;
+
+    int original = n;
+    int reversed = 0;
+    while (n > 0) {
+        reversed = reversed * 10 + (n % 10);
+        n /= 10;
+    }
+    // Missing Line
+    return original == reversed;
 }
 
 int main(void) {
@@ -694,8 +768,16 @@ int main(void) {
 using namespace std;
 
 bool isPalindrome(int n) {
-    // Write Logic Here
-    return false;
+    if (n < 0) return false;
+
+    int original = n;
+    int reversed = 0;
+    while (n > 0) {
+        reversed = reversed * 10 + (n % 10);
+        n /= 10;
+    }
+    // Missing Line
+    return original == reversed;
 }
 
 int main() {
@@ -713,8 +795,16 @@ int main() {
 
 class Program {
     static bool IsPalindrome(int n) {
-        // Write Logic Here
-        return false;
+        if (n < 0) return false;
+
+        int original = n;
+        int reversed = 0;
+        while (n > 0) {
+            reversed = reversed * 10 + (n % 10);
+            n /= 10;
+        }
+        // Missing Line
+        return original == reversed;
     }
 
     static void Main() {
@@ -736,8 +826,18 @@ import (
 )
 
 func isPalindrome(n int) bool {
-	// Write Logic Here
-	return false
+	if n < 0 {
+		return false
+	}
+
+	original := n
+	reversed := 0
+	for n > 0 {
+		reversed = reversed*10 + (n % 10)
+		n /= 10
+	}
+	// Missing Line
+	return original == reversed
 }
 
 func main() {
@@ -779,7 +879,7 @@ func main() {
 // ─────────────────────────────────────────────────────────────────────────────
 const searchElementInArray = {
   title: 'Search Element in Array',
-  difficulty: 'medium',
+  difficulty: 'easy',
   points: 15,
   category: 'arrays',
   tags: ['array', 'search', 'linear-search'],
@@ -806,8 +906,11 @@ const searchElementInArray = {
 
 
 def search(nums, key):
-    # Write Logic Here
-    pass
+    for value in nums:
+        if value == key:
+            # Missing Line
+            return True
+    return False
 
 
 def solve():
@@ -829,7 +932,12 @@ import java.util.*;
 
 public class Main {
     static boolean search(int[] arr, int key) {
-        // Write Logic Here
+        for (int value : arr) {
+            if (value == key) {
+                // Missing Line
+                return true;
+            }
+        }
         return false;
     }
 
@@ -854,7 +962,12 @@ public class Main {
     javascript: String.raw`const fs = require('fs');
 
 function search(arr, key) {
-  // Write Logic Here
+  for (const value of arr) {
+    if (value === key) {
+      // Missing Line
+      return true;
+    }
+  }
   return false;
 }
 
@@ -875,7 +988,12 @@ solve();
 #include <stdlib.h>
 
 int search(const int *arr, int n, int key) {
-    // Write Logic Here
+    for (int i = 0; i < n; i++) {
+        if (arr[i] == key) {
+            // Missing Line
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -901,7 +1019,12 @@ int main(void) {
 using namespace std;
 
 bool search(const vector<int> &arr, int key) {
-    // Write Logic Here
+    for (int value : arr) {
+        if (value == key) {
+            // Missing Line
+            return true;
+        }
+    }
     return false;
 }
 
@@ -927,7 +1050,12 @@ using System.Linq;
 
 class Program {
     static bool Search(int[] arr, int key) {
-        // Write Logic Here
+        foreach (var value in arr) {
+            if (value == key) {
+                // Missing Line
+                return true;
+            }
+        }
         return false;
     }
 
@@ -954,7 +1082,12 @@ import (
 )
 
 func search(arr []int, key int) bool {
-	// Write Logic Here
+	for _, value := range arr {
+		if value == key {
+			// Missing Line
+			return true
+		}
+	}
 	return false
 }
 
@@ -1018,7 +1151,7 @@ func main() {
 const secondLargestDistinct = {
     title: 'Find Second Largest Distinct Element',
     slug: 'find-second-largest-distinct-element-without-sorting',
-    difficulty: 'hard',
+    difficulty: 'easy',
     points: 16,
   category: 'arrays',
   tags: ['array', 'one-pass', 'no-sorting'],
@@ -1042,11 +1175,33 @@ const secondLargestDistinct = {
   ],
   starterCode: {
     python: String.raw`def second_largest(arr):
-    pass
+    largest = None
+    second = None
+
+    for value in arr:
+        if largest is None or value > largest:
+            second = largest
+            largest = value
+        elif value != largest and (second is None or value > second):
+            second = value
+    # Missing Line
+    return -1 if second is None else second
 `,
     java: String.raw`public class Main {
     public static int secondLargest(int[] arr) {
-        return 0;
+        Integer largest = null;
+        Integer second = null;
+
+        for (int value : arr) {
+            if (largest == null || value > largest) {
+                second = largest;
+                largest = value;
+            } else if (value != largest && (second == null || value > second)) {
+                second = value;
+            }
+        }
+        // Missing Line
+        return second == null ? -1 : second;
     }
 
     public static void main(String[] args) {
@@ -1054,23 +1209,71 @@ const secondLargestDistinct = {
 }
 `,
     javascript: String.raw`function secondLargest(arr) {
-  return 0;
+  let largest = null;
+  let second = null;
+
+  for (const value of arr) {
+    if (largest === null || value > largest) {
+      second = largest;
+      largest = value;
+    } else if (value !== largest && (second === null || value > second)) {
+      second = value;
+    }
+  }
+  // Missing Line
+  return second === null ? -1 : second;
 }
 `,
     c: String.raw`int secondLargest(int arr[], int n) {
-    return 0;
+    int largest = -2147483648;
+    int second = -2147483648;
+
+    for (int i = 0; i < n; i++) {
+        if (arr[i] > largest) {
+            second = largest;
+            largest = arr[i];
+        } else if (arr[i] != largest && arr[i] > second) {
+            second = arr[i];
+        }
+    }
+    // Missing Line
+    return second == -2147483648 ? -1 : second;
 }
 `,
     cpp: String.raw`#include <vector>
 using namespace std;
 
 int secondLargest(const vector<int> &arr) {
-    return 0;
+    int largest = INT_MIN;
+    int second = INT_MIN;
+
+    for (int value : arr) {
+        if (value > largest) {
+            second = largest;
+            largest = value;
+        } else if (value != largest && value > second) {
+            second = value;
+        }
+    }
+    // Missing Line
+    return second == INT_MIN ? -1 : second;
 }
 `,
     csharp: String.raw`public class Program {
     public static int SecondLargest(int[] arr) {
-        return 0;
+        int largest = int.MinValue;
+        int second = int.MinValue;
+
+        foreach (var value in arr) {
+            if (value > largest) {
+                second = largest;
+                largest = value;
+            } else if (value != largest && value > second) {
+                second = value;
+            }
+        }
+        // Missing Line
+        return second == int.MinValue ? -1 : second;
     }
 
     public static void Main() {
@@ -1078,7 +1281,21 @@ int secondLargest(const vector<int> &arr) {
 }
 `,
     go: String.raw`func secondLargest(arr []int) int {
-	return 0
+	largest := -2147483648
+	second := -2147483648
+	for _, value := range arr {
+		if value > largest {
+			second = largest
+			largest = value
+		} else if value != largest && value > second {
+			second = value
+		}
+	}
+	// Missing Line
+	if second == -2147483648 {
+		return -1
+	}
+	return second
 }
 `,
   },
@@ -1101,7 +1318,7 @@ int secondLargest(const vector<int> &arr) {
 const countVowels = {
     title: 'Count Vowels in String',
     slug: 'count-vowels-in-a-string',
-    difficulty: 'hard',
+    difficulty: 'easy',
     points: 17,
   category: 'strings',
   tags: ['string', 'character-classification', 'unicode'],
@@ -1123,11 +1340,24 @@ const countVowels = {
   ],
   starterCode: {
     python: String.raw`def count_vowels(s):
-    pass
+    vowels = set('aeiouAEIOU')
+    count = 0
+    for ch in s:
+        if ch in vowels:
+            count += 1
+    # Missing Line
+    return count
 `,
     java: String.raw`public class Main {
     public static int countVowels(String str) {
-        return 0;
+        int count = 0;
+        for (char ch : str.toLowerCase().toCharArray()) {
+            if ("aeiou".indexOf(ch) >= 0) {
+                count++;
+            }
+        }
+        // Missing Line
+        return count;
     }
 
     public static void main(String[] args) {
@@ -1135,23 +1365,47 @@ const countVowels = {
 }
 `,
     javascript: String.raw`function countVowels(str) {
-  return 0;
+  const vowels = new Set(['a', 'e', 'i', 'o', 'u']);
+  let count = 0;
+  for (const ch of str.toLowerCase()) {
+    if (vowels.has(ch)) count += 1;
+  }
+  // Missing Line
+  return count;
 }
 `,
     c: String.raw`int countVowels(char str[]) {
-    return 0;
+    int count = 0;
+    for (int i = 0; str[i] != '\0'; i++) {
+        char ch = str[i];
+        if (ch >= 'A' && ch <= 'Z') ch += 32;
+        if (ch == 'a' || ch == 'e' || ch == 'i' || ch == 'o' || ch == 'u') count++;
+    }
+    // Missing Line
+    return count;
 }
 `,
     cpp: String.raw`#include <string>
 using namespace std;
 
 int countVowels(const string &str) {
-    return 0;
+    int count = 0;
+    for (char ch : str) {
+        char c = static_cast<char>(tolower(ch));
+        if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') count++;
+    }
+    // Missing Line
+    return count;
 }
 `,
     csharp: String.raw`public class Program {
     public static int CountVowels(string str) {
-        return 0;
+        int count = 0;
+        foreach (var ch in str.ToLower()) {
+            if ("aeiou".Contains(ch)) count++;
+        }
+        // Missing Line
+        return count;
     }
 
     public static void Main() {
@@ -1159,7 +1413,19 @@ int countVowels(const string &str) {
 }
 `,
     go: String.raw`func countVowels(str string) int {
-	return 0
+	vowels := map[byte]bool{'a': true, 'e': true, 'i': true, 'o': true, 'u': true}
+	count := 0
+	for i := 0; i < len(str); i++ {
+		ch := str[i]
+		if ch >= 'A' && ch <= 'Z' {
+			ch += 'a' - 'A'
+		}
+		if vowels[ch] {
+			count++
+		}
+	}
+	// Missing Line
+	return count
 }
 `,
   },
@@ -1184,7 +1450,7 @@ int countVowels(const string &str) {
 const moveZerosToEnd = {
     title: 'Move All Zeros To End',
     slug: 'move-all-zeros-to-the-end-of-an-array',
-    difficulty: 'hard',
+    difficulty: 'easy',
     points: 18,
   category: 'arrays',
   tags: ['array', 'two-pointers', 'in-place', 'stability'],
@@ -1208,10 +1474,30 @@ const moveZerosToEnd = {
   ],
   starterCode: {
     python: String.raw`def move_zeros(arr):
-    pass
+    write = 0
+    for value in arr:
+        if value != 0:
+            arr[write] = value
+            write += 1
+    while write < len(arr):
+        arr[write] = 0
+        write += 1
+    # Missing Line
+    return arr
 `,
     java: String.raw`public class Main {
-    public static void moveZeros(int[] arr) {
+    public static int[] moveZeros(int[] arr) {
+        int write = 0;
+        for (int value : arr) {
+            if (value != 0) {
+                arr[write++] = value;
+            }
+        }
+        while (write < arr.length) {
+            arr[write++] = 0;
+        }
+        // Missing Line
+        return arr;
     }
 
     public static void main(String[] args) {
@@ -1219,20 +1505,62 @@ const moveZerosToEnd = {
 }
 `,
     javascript: String.raw`function moveZeros(arr) {
+  let write = 0;
+  for (const value of arr) {
+    if (value !== 0) {
+      arr[write] = value;
+      write += 1;
+    }
+  }
+  while (write < arr.length) {
+    arr[write] = 0;
+    write += 1;
+  }
+  // Missing Line
   return arr;
 }
 `,
     c: String.raw`void moveZeros(int arr[], int n) {
+    int write = 0;
+    for (int i = 0; i < n; i++) {
+        if (arr[i] != 0) {
+            arr[write++] = arr[i];
+        }
+    }
+    while (write < n) {
+        arr[write++] = 0;
+    }
+    // Missing Line
 }
 `,
     cpp: String.raw`#include <vector>
 using namespace std;
 
 void moveZeros(vector<int> &arr) {
+    int write = 0;
+    for (int value : arr) {
+        if (value != 0) {
+            arr[write++] = value;
+        }
+    }
+    while (write < static_cast<int>(arr.size())) {
+        arr[write++] = 0;
+    }
+    // Missing Line
 }
 `,
     csharp: String.raw`public class Program {
     public static void MoveZeros(int[] arr) {
+        int write = 0;
+        foreach (var value in arr) {
+            if (value != 0) {
+                arr[write++] = value;
+            }
+        }
+        while (write < arr.Length) {
+            arr[write++] = 0;
+        }
+        // Missing Line
     }
 
     public static void Main() {
@@ -1240,6 +1568,18 @@ void moveZeros(vector<int> &arr) {
 }
 `,
     go: String.raw`func moveZeros(arr []int) {
+	write := 0
+	for _, value := range arr {
+		if value != 0 {
+			arr[write] = value
+			write++
+		}
+	}
+	for write < len(arr) {
+		arr[write] = 0
+		write++
+	}
+	// Missing Line
 }
 `,
   },
