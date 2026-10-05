@@ -162,13 +162,17 @@ const CodingProblemPage = () => {
         setProblem(data.data);
         setProblemLocked((data.data.totalAttempts || 0) > 0);
 
-        // Restore drafts, falling back to the server's starter template.
+        // Replace an unchanged generic-template draft from older sessions with
+        // the problem-specific starter code; keep any student-edited draft.
         const restored = {};
         const starters = data.data.starterCode || {};
+        const templates = data.data.starterCodeTemplates || {};
         (data.data.languages || []).forEach((l) => {
           let saved = '';
           try { saved = localStorage.getItem(draftKey(slug, l.key)) || ''; } catch { saved = ''; }
-          restored[l.key] = saved || starters[l.key] || '';
+          restored[l.key] = saved && !isStarterCode(saved, templates[l.key])
+            ? saved
+            : starters[l.key] || '';
         });
         setCodeByLanguage(restored);
         setLanguage('python');
@@ -292,7 +296,7 @@ const CodingProblemPage = () => {
   const guardAction = useCallback((action) => {
     if (starterUnmodified) {
       setGuardDialog({ kind: 'starter', action });
-      toast.info('Modify the starter template before running or submitting.');
+      toast.info('Modify the starter code before running or submitting.');
       return true;
     }
     if (changedCodeLength < MIN_SOLUTION_CHANGE) {

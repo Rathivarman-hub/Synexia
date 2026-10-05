@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import connectDB from './config/db.js';
+import { connectRedis } from './config/redis.js';
 import logger from './config/logger.js';
 import CodingProblem from './models/CodingProblem.js';
 import { seedCodingProblems } from './services/codingProblemSeeder.js';
@@ -9,6 +10,7 @@ const RESET = process.argv.includes('--reset');
 
 const seed = async () => {
   await connectDB();
+  await connectRedis();
 
   if (RESET) {
     const { default: CodingSubmission } = await import('./models/CodingSubmission.js');

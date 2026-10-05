@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 import { DifficultyBadge, StatusBadge, getDifficultyMeta } from '../../components/DifficultyBadge';
@@ -35,6 +35,7 @@ const CodingProblemsPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState('');
   const { assessmentStarted, startAssessment } = useAssessmentSession();
 
   // Filters
@@ -79,13 +80,17 @@ const CodingProblemsPage = () => {
   }, [page, debouncedSearch, difficulty, sortBy, sortOrder]);
 
   // ─── Fullscreen ref ─────────────────────────────────────────────────────────
-  const pageRef = useRef(null);
-
   // ─── Start handler ─────────────────────────────────────────────────────────
   const handleStartAssessment = async () => {
     setStarting(true);
-    await startAssessment(pageRef.current);
-    setStarting(false);
+    setStartError('');
+    try {
+      await startAssessment();
+    } catch (err) {
+      setStartError(err.message || 'Could not start the assessment. Please try again.');
+    } finally {
+      setStarting(false);
+    }
   };
 
   useEffect(() => { fetchProblems(); }, [fetchProblems]);
@@ -103,12 +108,12 @@ const CodingProblemsPage = () => {
     };
   }, [problems]);
 
-  const showLandingScreen = !assessmentStarted && problems.length === 0;
+  const showLandingScreen = !assessmentStarted;
 
   // ─── Landing screen ─────────────────────────────────────────────────────────
   if (showLandingScreen) {
     return (
-      <div className="coding-list-page" ref={pageRef}>
+      <div className="coding-list-page">
         <div className="coding-page-hero">
           <div className="coding-hero-content">
             <div className="coding-hero-text">
@@ -162,13 +167,14 @@ const CodingProblemsPage = () => {
               <><FiPlay /> Start Assessment</>
             )}
           </button>
+          {startError && <div className="coding-error-banner" role="alert">{startError}</div>}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="coding-list-page" ref={pageRef}>
+    <div className="coding-list-page">
 
       {/* ─── Hero Header ─────────────────────────────────────────────── */}
       <div className="coding-page-hero">

@@ -4,6 +4,7 @@ import CodingProblem, {
 } from '../models/CodingProblem.js';
 import PROBLEMS from '../seedData/codingProblems.js';
 import logger from '../config/logger.js';
+import { deleteCachePattern } from '../utils/cache.js';
 
 const buildSeedBody = (problem, { resetStats = false } = {}) => {
   const testCases = problem.testCases.map((tc) => ({
@@ -58,6 +59,11 @@ export const seedCodingProblems = async ({
   });
 
   const result = await CodingProblem.bulkWrite(operations, { ordered: false });
+  await Promise.all([
+    deleteCachePattern('coding:problems:*'),
+    deleteCachePattern('coding:problem:*'),
+  ]);
+
   const inserted = result.upsertedCount || 0;
   const modified = result.modifiedCount || 0;
   const matched = result.matchedCount || 0;

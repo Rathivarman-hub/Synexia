@@ -209,7 +209,7 @@ export const getProblems = asyncHandler(async (req, res) => {
  */
 export const getProblem = asyncHandler(async (req, res) => {
   const { slug } = req.params;
-  const cacheKey = `coding:problem:${slug}`;
+  const cacheKey = `coding:problem:v2:${slug}`;
 
   // WHY the cache is per-problem, not per-user: the problem body is identical for
   // every student, so it must be cached ONCE and shared. The per-user Status
@@ -234,6 +234,10 @@ export const getProblem = asyncHandler(async (req, res) => {
       throw new Error('Problem not found');
     }
 
+    const starterCodeTemplates = Object.fromEntries(
+      LANGUAGE_KEYS.map((language) => [language, getStarterTemplate(language)])
+    );
+
     shared = {
       _id: doc._id,
       title: doc.title,
@@ -249,8 +253,12 @@ export const getProblem = asyncHandler(async (req, res) => {
       outputFormat: doc.outputFormat,
       hints: doc.hints,
       examples: doc.examples,
+      starterCodeTemplates,
       starterCode: Object.fromEntries(
-        LANGUAGE_KEYS.map((language) => [language, getStarterTemplate(language)])
+        LANGUAGE_KEYS.map((language) => [
+          language,
+          doc.starterCode?.[language] || starterCodeTemplates[language],
+        ])
       ),
       // Sample cases only. The hidden flag is stripped for the client too —
       // revealing WHICH cases are hidden is a free hint about their shape.
@@ -265,15 +273,6 @@ export const getProblem = asyncHandler(async (req, res) => {
 
     await setCache(cacheKey, shared, DETAIL_TTL);
   }
-
-  // Normalize cached details too, so older Redis entries cannot reintroduce
-  // problem-specific starter code after the template policy changes.
-  shared = {
-    ...shared,
-    starterCode: Object.fromEntries(
-      LANGUAGE_KEYS.map((language) => [language, getStarterTemplate(language)])
-    ),
-  };
 
   // Personalisation pass, outside the cached envelope.
   const statusMap = await getUserProblemStatusMap(req.user._id, [shared._id]);
@@ -303,15 +302,13 @@ export const getStarterCode = asyncHandler(async (req, res) => {
     throw new Error('Problem not found');
   }
 
-  // Student editors always start from a language entry template. Problem-specific
-  // solution scaffolding belongs in the statement, not in the default editor.
-  const code = getStarterTemplate(language);
+  const code = doc.starterCode?.[language] || getStarterTemplate(language);
   res.json({
     success: true,
     data: {
       language,
       code,
-      isTemplate: true,
+      isTemplate: !doc.starterCode?.[language],
       template: code,
     },
   });

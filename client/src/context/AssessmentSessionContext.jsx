@@ -12,8 +12,8 @@ const fullscreenElement = () => document.fullscreenElement || document.webkitFul
 const requestFullscreen = (element) => {
   const target = element || document.documentElement;
   if (target.requestFullscreen) return target.requestFullscreen();
-  if (target.webkitRequestFullscreen) return target.webkitRequestFullscreen();
-  return Promise.resolve();
+  if (target.webkitRequestFullscreen) return Promise.resolve(target.webkitRequestFullscreen());
+  return Promise.reject(new Error('Fullscreen mode is not supported by this browser.'));
 };
 
 const exitFullscreen = () => {
@@ -62,14 +62,17 @@ export const AssessmentSessionProvider = ({ children }) => {
     setAssessmentStarted(false);
     setWarningDialog({ final: true, count, violation });
 
-    try {
-      await autoSubmitRef.current?.({
-        warningCount: count,
-        warningEvents: events,
-        elapsedSeconds: startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0,
-      });
-    } catch {
-      // The session still ends when the final automatic submission cannot run.
+    const submitter = autoSubmitRef.current;
+    if (submitter) {
+      void Promise.resolve()
+        .then(() => submitter({
+          warningCount: count,
+          warningEvents: events,
+          elapsedSeconds: startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0,
+        }))
+        .catch((error) => {
+          console.error('Automatic assessment submission failed:', error);
+        });
     }
 
     await exitFullscreen();
@@ -100,6 +103,7 @@ export const AssessmentSessionProvider = ({ children }) => {
 
   const startAssessment = useCallback(async (element) => {
     if (activeRef.current) return;
+    await requestFullscreen(element || document.documentElement);
     activeRef.current = true;
     endedRef.current = false;
     warningCountRef.current = 0;
@@ -111,7 +115,6 @@ export const AssessmentSessionProvider = ({ children }) => {
     setWarningEvents([]);
     setWarningDialog(null);
     setStartedAt(Date.now());
-    await requestFullscreen(element);
   }, []);
 
   const continueAfterWarning = useCallback(async () => {
@@ -182,11 +185,11 @@ export const AssessmentSessionProvider = ({ children }) => {
           <section className="assessment-warning-modal">
             <div className="assessment-warning-mark" aria-hidden="true"><FiAlertTriangle /></div>
             <h2 id="assessment-warning-title">
-              {warningDialog.final ? 'Assessment submitted' : 'Assessment warning'}
+              {warningDialog.final ? 'Assessment ended' : 'Assessment warning'}
             </h2>
             <p>
               {warningDialog.final
-                ? `Warning limit reached (${warningDialog.count}/${MAX_WARNINGS}). Your assessment has been submitted.`
+                ? `Warning limit reached (${warningDialog.count}/${MAX_WARNINGS}). Returning to the student dashboard.`
                 : `A fullscreen or focus violation was detected. Warning ${warningDialog.count} of ${MAX_WARNINGS}.`}
             </p>
             {!warningDialog.final && (
