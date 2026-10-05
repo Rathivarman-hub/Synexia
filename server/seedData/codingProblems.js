@@ -277,7 +277,6 @@ public class Main {
         }
         // Missing Line
 
-        System.out.println(total - currentSum);
     }
 }
 `,
@@ -315,8 +314,6 @@ int main(void) {
         currentSum += nums[i];
     }
     // Missing Line
-
-    printf("%lld\n", total - currentSum);
     free(nums);
     return 0;
 }
@@ -339,8 +336,6 @@ int main() {
     long long currentSum = 0;
     for (long long value : nums) currentSum += value;
     // Missing Line
-
-    cout << total - currentSum << '\n';
     return 0;
 }
 `,
@@ -359,8 +354,6 @@ class Program {
         long total = 1L * n * (n + 1) / 2;
         long currentSum = nums.Sum();
         // Missing Line
-
-        Console.WriteLine(total - currentSum);
     }
 }
 `,
@@ -401,8 +394,6 @@ func main() {
 		currentSum += v
 	}
 	// Missing Line
-
-	fmt.Println(total - currentSum)
 }
 `,
   },
@@ -452,9 +443,8 @@ def reverse_number(n):
     reversed_value = 0
     while n > 0:
         digit = n % 10
-        reversed_value = reversed_value * 10 + digit
+        # Missing Line
         n //= 10
-    # Missing Line
     return reversed_value
 
 
@@ -475,13 +465,12 @@ import java.util.*;
 
 public class Main {
     static int reverseNumber(int n) {
-        int reversed = 0;
+        int         reversed = 0;
         while (n > 0) {
             int digit = n % 10;
-            reversed = reversed * 10 + digit;
+            // Missing Line
             n /= 10;
         }
-        // Missing Line
         return reversed;
     }
 
@@ -501,10 +490,9 @@ function reverseNumber(n) {
   let reversed = 0;
   while (n > 0) {
     const digit = n % 10;
-    reversed = reversed * 10 + digit;
+    // Missing Line
     n = Math.trunc(n / 10);
   }
-  // Missing Line
   return reversed;
 }
 
@@ -523,10 +511,9 @@ int reverseNumber(int n) {
     int reversed = 0;
     while (n > 0) {
         int digit = n % 10;
-        reversed = reversed * 10 + digit;
+        // Missing Line
         n /= 10;
     }
-    // Missing Line
     return reversed;
 }
 
@@ -545,10 +532,9 @@ int reverseNumber(int n) {
     int reversed = 0;
     while (n > 0) {
         int digit = n % 10;
-        reversed = reversed * 10 + digit;
+        // Missing Line
         n /= 10;
     }
-    // Missing Line
     return reversed;
 }
 
@@ -570,10 +556,9 @@ class Program {
         int reversed = 0;
         while (n > 0) {
             int digit = n % 10;
-            reversed = reversed * 10 + digit;
+            // Missing Line
             n /= 10;
         }
-        // Missing Line
         return reversed;
     }
 
@@ -599,10 +584,9 @@ func reverseNumber(n int) int {
 	reversed := 0
 	for n > 0 {
 		digit := n % 10
-		reversed = reversed*10 + digit
+		// Missing Line
 		n /= 10
 	}
-	// Missing Line
 	return reversed
 }
 
@@ -674,7 +658,6 @@ def is_palindrome(x):
         reversed_num = reversed_num * 10 + x % 10
         x //= 10
     # Missing Line
-    return original == reversed_num
 
 
 def solve():
@@ -703,7 +686,6 @@ public class Main {
             n /= 10;
         }
         // Missing Line
-        return original == reversed;
     }
 
     public static void main(String[] args) throws IOException {
@@ -729,7 +711,6 @@ function isPalindrome(x) {
     current = Math.trunc(current / 10);
   }
   // Missing Line
-  return original === reversed;
 }
 
 function solve() {
@@ -753,7 +734,6 @@ int isPalindrome(int n) {
         n /= 10;
     }
     // Missing Line
-    return original == reversed;
 }
 
 int main(void) {
@@ -777,7 +757,6 @@ bool isPalindrome(int n) {
         n /= 10;
     }
     // Missing Line
-    return original == reversed;
 }
 
 int main() {
@@ -804,7 +783,6 @@ class Program {
             n /= 10;
         }
         // Missing Line
-        return original == reversed;
     }
 
     static void Main() {
@@ -837,7 +815,6 @@ func isPalindrome(n int) bool {
 		n /= 10
 	}
 	// Missing Line
-	return original == reversed
 }
 
 func main() {
@@ -909,7 +886,7 @@ def search(nums, key):
     for value in nums:
         if value == key:
             # Missing Line
-            return True
+            pass
     return False
 
 
@@ -935,7 +912,6 @@ public class Main {
         for (int value : arr) {
             if (value == key) {
                 // Missing Line
-                return true;
             }
         }
         return false;
@@ -965,7 +941,6 @@ function search(arr, key) {
   for (const value of arr) {
     if (value === key) {
       // Missing Line
-      return true;
     }
   }
   return false;
@@ -991,7 +966,6 @@ int search(const int *arr, int n, int key) {
     for (int i = 0; i < n; i++) {
         if (arr[i] == key) {
             // Missing Line
-            return 1;
         }
     }
     return 0;
@@ -1022,7 +996,6 @@ bool search(const vector<int> &arr, int key) {
     for (int value : arr) {
         if (value == key) {
             // Missing Line
-            return true;
         }
     }
     return false;
@@ -1053,7 +1026,6 @@ class Program {
         foreach (var value in arr) {
             if (value == key) {
                 // Missing Line
-                return true;
             }
         }
         return false;
@@ -1085,7 +1057,6 @@ func search(arr []int, key int) bool {
 	for _, value := range arr {
 		if value == key {
 			// Missing Line
-			return true
 		}
 	}
 	return false
@@ -1185,7 +1156,6 @@ const secondLargestDistinct = {
         elif value != largest and (second is None or value > second):
             second = value
     # Missing Line
-    return -1 if second is None else second
 `,
     java: String.raw`public class Main {
     public static int secondLargest(int[] arr) {
@@ -1201,7 +1171,6 @@ const secondLargestDistinct = {
             }
         }
         // Missing Line
-        return second == null ? -1 : second;
     }
 
     public static void main(String[] args) {
@@ -1221,7 +1190,6 @@ const secondLargestDistinct = {
     }
   }
   // Missing Line
-  return second === null ? -1 : second;
 }
 `,
     c: String.raw`int secondLargest(int arr[], int n) {
@@ -1237,7 +1205,6 @@ const secondLargestDistinct = {
         }
     }
     // Missing Line
-    return second == -2147483648 ? -1 : second;
 }
 `,
     cpp: String.raw`#include <vector>
@@ -1256,7 +1223,6 @@ int secondLargest(const vector<int> &arr) {
         }
     }
     // Missing Line
-    return second == INT_MIN ? -1 : second;
 }
 `,
     csharp: String.raw`public class Program {
@@ -1273,7 +1239,6 @@ int secondLargest(const vector<int> &arr) {
             }
         }
         // Missing Line
-        return second == int.MinValue ? -1 : second;
     }
 
     public static void Main() {
@@ -1292,10 +1257,6 @@ int secondLargest(const vector<int> &arr) {
 		}
 	}
 	// Missing Line
-	if second == -2147483648 {
-		return -1
-	}
-	return second
 }
 `,
   },
@@ -1346,7 +1307,6 @@ const countVowels = {
         if ch in vowels:
             count += 1
     # Missing Line
-    return count
 `,
     java: String.raw`public class Main {
     public static int countVowels(String str) {
@@ -1357,7 +1317,6 @@ const countVowels = {
             }
         }
         // Missing Line
-        return count;
     }
 
     public static void main(String[] args) {
@@ -1371,7 +1330,6 @@ const countVowels = {
     if (vowels.has(ch)) count += 1;
   }
   // Missing Line
-  return count;
 }
 `,
     c: String.raw`int countVowels(char str[]) {
@@ -1382,7 +1340,6 @@ const countVowels = {
         if (ch == 'a' || ch == 'e' || ch == 'i' || ch == 'o' || ch == 'u') count++;
     }
     // Missing Line
-    return count;
 }
 `,
     cpp: String.raw`#include <string>
@@ -1395,7 +1352,6 @@ int countVowels(const string &str) {
         if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') count++;
     }
     // Missing Line
-    return count;
 }
 `,
     csharp: String.raw`public class Program {
@@ -1405,7 +1361,6 @@ int countVowels(const string &str) {
             if ("aeiou".Contains(ch)) count++;
         }
         // Missing Line
-        return count;
     }
 
     public static void Main() {
@@ -1425,7 +1380,6 @@ int countVowels(const string &str) {
 		}
 	}
 	// Missing Line
-	return count
 }
 `,
   },
@@ -1480,9 +1434,8 @@ const moveZerosToEnd = {
             arr[write] = value
             write += 1
     while write < len(arr):
-        arr[write] = 0
+        # Missing Line
         write += 1
-    # Missing Line
     return arr
 `,
     java: String.raw`public class Main {
@@ -1494,9 +1447,8 @@ const moveZerosToEnd = {
             }
         }
         while (write < arr.length) {
-            arr[write++] = 0;
+            // Missing Line
         }
-        // Missing Line
         return arr;
     }
 
@@ -1513,10 +1465,9 @@ const moveZerosToEnd = {
     }
   }
   while (write < arr.length) {
-    arr[write] = 0;
+    // Missing Line
     write += 1;
   }
-  // Missing Line
   return arr;
 }
 `,
@@ -1528,9 +1479,8 @@ const moveZerosToEnd = {
         }
     }
     while (write < n) {
-        arr[write++] = 0;
+        // Missing Line
     }
-    // Missing Line
 }
 `,
     cpp: String.raw`#include <vector>
@@ -1544,9 +1494,8 @@ void moveZeros(vector<int> &arr) {
         }
     }
     while (write < static_cast<int>(arr.size())) {
-        arr[write++] = 0;
+        // Missing Line
     }
-    // Missing Line
 }
 `,
     csharp: String.raw`public class Program {
@@ -1558,9 +1507,8 @@ void moveZeros(vector<int> &arr) {
             }
         }
         while (write < arr.Length) {
-            arr[write++] = 0;
+            // Missing Line
         }
-        // Missing Line
     }
 
     public static void Main() {
@@ -1576,10 +1524,9 @@ void moveZeros(vector<int> &arr) {
 		}
 	}
 	for write < len(arr) {
-		arr[write] = 0
+		// Missing Line
 		write++
 	}
-	// Missing Line
 }
 `,
   },
