@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FiHome, FiUser, FiUsers } from 'react-icons/fi';
+import { FiHome, FiCode, FiAward, FiUser, FiSettings, FiUsers } from 'react-icons/fi';
 import logo from '../assets/1logo.png';
 import './Sidebar.css';
 
@@ -11,12 +11,16 @@ const Sidebar = () => {
 
   const adminLinks = [
     { to: '/admin', label: 'Dashboard', icon: FiHome },
+    { to: '/admin/coding-problems', label: 'Coding Questions', icon: FiCode },
+    { to: '/admin/debugging-problems', label: 'Debugging Questions', icon: FiCode },
     { to: '/admin/students', label: 'Students', icon: FiUsers },
+    { to: '/leaderboard', label: 'Leaderboard', icon: FiAward },
     { to: '/admin/profile', label: 'Profile', icon: FiUser },
   ];
 
   const studentLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: FiHome },
+    { to: '/debugging/problems', label: 'Debugging Assessment', icon: FiCode },
     { to: '/profile', label: 'Profile', icon: FiUser },
   ];
 
