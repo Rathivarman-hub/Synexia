@@ -142,14 +142,6 @@ function App() {
                   </AdminRoute>
                 }
               />
-              <Route
-                path="/admin/coding-problems"
-                element={
-                  <AdminRoute>
-                    <CodingProblemManagementPage />
-                  </AdminRoute>
-                }
-              />
               {/* 404 Route */}
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
