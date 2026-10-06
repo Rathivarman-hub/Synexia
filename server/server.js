@@ -13,14 +13,11 @@ import mongoose from 'mongoose';
 import connectDB from './config/db.js';
 import { connectRedis, isRedisConnected } from './config/redis.js';
 import logger from './config/logger.js';
-import { seedCodingProblems } from './services/codingProblemSeeder.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { generalLimiter, authLimiter, adminLimiter } from './middleware/rateLimiter.js';
 
 import authRoutes from './routes/auth.js';
-import leaderboardRoutes from './routes/leaderboard.js';
 import adminRoutes from './routes/admin.js';
-import codingRoutes from './routes/coding.js';
 import debuggingRoutes from './routes/debugging.js';
 import { seedDebuggingProblems } from './services/debuggingProblemSeeder.js';
 
@@ -104,11 +101,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
-// /api/leaderboard is a thin alias over the coding board — see
-// routes/leaderboard.js for why the old URL is preserved.
-app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/coding', codingRoutes);
 app.use('/api/debugging', debuggingRoutes);
 
 app.use(notFound);
@@ -118,7 +111,6 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   await connectDB();
-  await seedCodingProblems({ preserveExisting: true });
   await seedDebuggingProblems();
   await connectRedis();
 

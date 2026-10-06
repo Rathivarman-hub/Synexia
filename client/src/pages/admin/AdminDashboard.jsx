@@ -144,10 +144,7 @@ const AdminDashboard = () => {
 
         <Row className="g-3 mb-4">
           {[
-            { icon: <FiCode />, label: 'Coding Questions', to: '/admin/coding-problems' },
-            { icon: <FiCode />, label: 'Debugging Questions', to: '/admin/debugging-problems' },
             { icon: <FiUsers />, label: 'View Students', to: '/admin/students' },
-            { icon: <FiTrendingUp />, label: 'Leaderboard', to: '/leaderboard' },
             { icon: <FiSettings />, label: 'Settings', to: '/admin/settings' },
           ].map((item) => (
             <Col key={item.to} xs={6} md={3}>

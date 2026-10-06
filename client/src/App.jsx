@@ -20,17 +20,11 @@ import NotFoundPage from './pages/public/NotFoundPage';
 // Student Pages
 import StudentDashboard from './pages/student/StudentDashboard';
 import ProfilePage from './pages/student/ProfilePage';
-import CodingProblemsPage from './pages/student/CodingProblemsPage';
-import CodingProblemPage from './pages/student/CodingProblemPage';
-import CodingLeaderboardPage from './pages/student/CodingLeaderboardPage';
-import SubmissionsPage from './pages/student/SubmissionsPage';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import StudentsPage from './pages/admin/StudentsPage';
 import SettingsPage from './pages/admin/SettingsPage';
-import CodingProblemManagementPage from './pages/admin/CodingProblemManagementPage';
-import DebuggingProblemManagementPage from './pages/admin/DebuggingProblemManagementPage';
 
 // Layout wrapper to conditionally show sidebar/navbar
 const Layout = ({ children }) => {
@@ -100,10 +94,10 @@ function App() {
                   lands them on the equivalent coding screen in one hop, whereas a
                   404 reads as "the site is broken". The `replace` keeps the dead
                   URL out of the history so Back does not bounce. */}
-              <Route path="/languages" element={<Navigate to="/coding/problems" replace />} />
-              <Route path="/assessment/:language" element={<Navigate to="/coding/problems" replace />} />
-              <Route path="/results/:id" element={<Navigate to="/coding/problems" replace />} />
-              <Route path="/admin/questions" element={<Navigate to="/admin/coding-problems" replace />} />
+              <Route path="/languages" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/assessment/:language" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/results/:id" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/admin/questions" element={<Navigate to="/admin" replace />} />
 
               <Route
                 path="/profile"
@@ -114,70 +108,6 @@ function App() {
                 }
               />
 
-              {/* Coding module — students.
-                  WHY the fixed /coding/problems route is declared BEFORE
-                  /coding/problems/:slug: React Router scores static segments
-                  above dynamic ones, so the reverse order is safe, but keeping
-                  the literal first makes the intent obvious to the next reader
-                  and avoids relying on ranking behaviour. */}
-              <Route
-                path="/coding/problems"
-                element={
-                  <ProtectedRoute>
-                    <CodingProblemsPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/debugging/problems"
-                element={
-                  <ProtectedRoute>
-                    <CodingProblemsPage isDebugging />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/coding/problems/:slug"
-                element={
-                  <ProtectedRoute>
-                    <CodingProblemPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/debugging/problems/:slug"
-                element={
-                  <ProtectedRoute>
-                    <CodingProblemPage isDebugging />
-                  </ProtectedRoute>
-                }
-              />
-              {/* Both ranking URLs are retained for admins; AdminRoute redirects
-                  students to their assessment dashboard. */}
-              <Route
-                path="/leaderboard"
-                element={
-                  <AdminRoute>
-                    <CodingLeaderboardPage />
-                  </AdminRoute>
-                }
-              />
-              <Route
-                path="/coding/leaderboard"
-                element={
-                  <AdminRoute>
-                    <CodingLeaderboardPage />
-                  </AdminRoute>
-                }
-              />
-              <Route
-                path="/coding/submissions"
-                element={
-                  <ProtectedRoute>
-                    <SubmissionsPage />
-                  </ProtectedRoute>
-                }
-              />
 
               {/* Admin Protected Routes */}
               <Route
@@ -220,15 +150,6 @@ function App() {
                   </AdminRoute>
                 }
               />
-              <Route
-                path="/admin/debugging-problems"
-                element={
-                  <AdminRoute>
-                    <DebuggingProblemManagementPage />
-                  </AdminRoute>
-                }
-              />
-
               {/* 404 Route */}
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
