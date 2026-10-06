@@ -140,6 +140,12 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   // and the slower response must not overwrite the newer verdict.
   const runSeq = useRef(0);
 
+  const readDraftForLanguage = useCallback((languageKey, template) => {
+    let saved = '';
+    try { saved = localStorage.getItem(draftKey(slug, languageKey, isDebugging)) || ''; } catch { saved = ''; }
+    return saved && !isStarterCode(saved, template) ? saved : template;
+  }, [slug, isDebugging]);
+
   const code = codeByLanguage[language] ?? '';
   const originalStarterCode = problem?.starterCode?.[language] ?? '';
   const starterUnmodified = isStarterCode(code, originalStarterCode);
@@ -147,6 +153,14 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const setCode = useCallback((next) => {
     setCodeByLanguage((prev) => ({ ...prev, [language]: next }));
   }, [language]);
+
+  useEffect(() => {
+    if (!problem || !problem.starterCode?.[language]) return;
+    setCodeByLanguage((prev) => {
+      if (prev[language] !== undefined) return prev;
+      return { ...prev, [language]: readDraftForLanguage(language, problem.starterCode[language]) };
+    });
+  }, [problem, language, readDraftForLanguage]);
 
   // ─── Load the problem ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -181,14 +195,14 @@ const CodingProblemPage = ({ isDebugging = false }) => {
         const starters = loaded.starterCode || {};
         const templates = loaded.starterCodeTemplates || {};
         (isDebugging ? [{ key: 'python' }] : loaded.languages || []).forEach((l) => {
-          let saved = '';
-          try { saved = localStorage.getItem(draftKey(slug, l.key, isDebugging)) || ''; } catch { saved = ''; }
-          restored[l.key] = saved && !isStarterCode(saved, templates[l.key])
-            ? saved
-            : starters[l.key] || '';
+          const template = templates[l.key] || starters[l.key] || '';
+          restored[l.key] = readDraftForLanguage(l.key, template);
         });
         setCodeByLanguage(restored);
-        setLanguage('python');
+        setLanguage((current) => {
+          if (current && restored[current] !== undefined) return current;
+          return 'python';
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -239,14 +253,19 @@ const CodingProblemPage = ({ isDebugging = false }) => {
         }));
         setCodeByLanguage((current) => {
           if (current[nextLanguage] !== undefined) return current;
-          let saved = '';
-          try { saved = localStorage.getItem(draftKey(slug, nextLanguage, true)) || ''; } catch { saved = ''; }
-          return { ...current, [nextLanguage]: saved && !isStarterCode(saved, template) ? saved : template };
+          return { ...current, [nextLanguage]: readDraftForLanguage(nextLanguage, template) };
         });
       } catch (err) {
         toast.error(err.response?.data?.message || `Could not load the ${nextLanguage} template.`);
         return;
       }
+    }
+    if (problem?.starterCode?.[nextLanguage] || !isDebugging) {
+      setCodeByLanguage((current) => {
+        const template = problem?.starterCode?.[nextLanguage] || '';
+        if (current[nextLanguage] !== undefined) return current;
+        return { ...current, [nextLanguage]: readDraftForLanguage(nextLanguage, template) };
+      });
     }
     setLanguage(nextLanguage);
     setRunResult(null);
