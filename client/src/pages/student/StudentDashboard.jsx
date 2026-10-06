@@ -124,7 +124,7 @@ const StudentDashboard = () => {
               <div className="dash-coding-head">
                 <div>
                   <h3 className="dash-coding-title">
-                    <FiCode aria-hidden="true" /> Coding Practice
+                    <FiCode aria-hidden="true" /> Normal Coding Assessment
                   </h3>
                   <p className="dash-coding-subtitle">
                     Solve problems in Python, Java, JavaScript, C, C++, C# or Go.
@@ -176,6 +176,24 @@ const StudentDashboard = () => {
             </div>
           </Col>
 
+        </Row>
+
+        <Row className="mb-4">
+          <Col md={12}>
+            <div className="techiz-card dash-coding-card">
+              <div className="dash-coding-head">
+                <div>
+                  <h3 className="dash-coding-title"><FiCode aria-hidden="true" /> Debugging Assessment</h3>
+                  <p className="dash-coding-subtitle">
+                    Repair incomplete programs and earn points across seven supported languages.
+                  </p>
+                </div>
+                <Link to="/debugging/problems" className="btn-techiz btn-techiz--sm">
+                  Browse debugging questions <FaArrowRight aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+          </Col>
         </Row>
 
         {/* ─── Recent Submissions ───────────────────────────────────── */}

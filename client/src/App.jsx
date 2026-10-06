@@ -30,13 +30,14 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import StudentsPage from './pages/admin/StudentsPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import CodingProblemManagementPage from './pages/admin/CodingProblemManagementPage';
+import DebuggingProblemManagementPage from './pages/admin/DebuggingProblemManagementPage';
 
 // Layout wrapper to conditionally show sidebar/navbar
 const Layout = ({ children }) => {
   const location = useLocation();
   const { user } = useAuth();
 
-  if (/^\/coding\/problems(?:\/|$)/.test(location.pathname)) {
+  if (/^\/(?:coding|debugging)\/problems(?:\/|$)/.test(location.pathname)) {
     return (
       <AssessmentSessionProvider>
         <div className="assessment-app-layout">{children}</div>
@@ -128,10 +129,26 @@ function App() {
                 }
               />
               <Route
+                path="/debugging/problems"
+                element={
+                  <ProtectedRoute>
+                    <CodingProblemsPage isDebugging />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/coding/problems/:slug"
                 element={
                   <ProtectedRoute>
                     <CodingProblemPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/debugging/problems/:slug"
+                element={
+                  <ProtectedRoute>
+                    <CodingProblemPage isDebugging />
                   </ProtectedRoute>
                 }
               />
@@ -200,6 +217,14 @@ function App() {
                 element={
                   <AdminRoute>
                     <CodingProblemManagementPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/admin/debugging-problems"
+                element={
+                  <AdminRoute>
+                    <DebuggingProblemManagementPage />
                   </AdminRoute>
                 }
               />

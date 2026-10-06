@@ -31,6 +31,7 @@ const ProblemNavigator = ({
   onCatalogLoaded,
   collapsed,
   onToggle,
+  isDebugging = false,
 }) => {
   const { slug: currentSlug } = useParams();
   const [rows, setRows] = useState([]);
@@ -41,7 +42,7 @@ const ProblemNavigator = ({
     setLoading(true);
 
     api
-      .get('/coding/stats/me/problems')
+      .get(isDebugging ? '/debugging/stats/me/problems' : '/coding/stats/me/problems')
       .then(({ data }) => {
         if (cancelled) return;
         // The endpoint is ordered server-side by (order, points) — the same order
@@ -60,7 +61,7 @@ const ProblemNavigator = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDebugging]);
 
   // Publish the ordering to the parent for previous/next navigation.
   useEffect(() => {
@@ -147,7 +148,7 @@ const ProblemNavigator = ({
             return (
               <li key={r._id}>
                 <Link
-                  to={`/coding/problems/${r.slug}`}
+                  to={`/${isDebugging ? 'debugging' : 'coding'}/problems/${r.slug}`}
                   className={`pn-item ${tone(r)}`}
                   title={r.title}
                   aria-current={r.slug === currentSlug ? 'page' : undefined}

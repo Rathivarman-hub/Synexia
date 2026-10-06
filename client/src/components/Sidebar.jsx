@@ -11,7 +11,8 @@ const Sidebar = () => {
 
   const adminLinks = [
     { to: '/admin', label: 'Dashboard', icon: FiHome },
-    { to: '/admin/coding-problems', label: 'Problems', icon: FiCode },
+    { to: '/admin/coding-problems', label: 'Coding Questions', icon: FiCode },
+    { to: '/admin/debugging-problems', label: 'Debugging Questions', icon: FiCode },
     { to: '/admin/students', label: 'Students', icon: FiUsers },
     { to: '/leaderboard', label: 'Leaderboard', icon: FiAward },
     { to: '/admin/profile', label: 'Profile', icon: FiUser },
@@ -20,6 +21,7 @@ const Sidebar = () => {
   const studentLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: FiHome },
     { to: '/coding/problems', label: 'Coding Problems', icon: FiCode },
+    { to: '/debugging/problems', label: 'Debugging Assessment', icon: FiCode },
     { to: '/profile', label: 'Profile', icon: FiUser },
   ];
 

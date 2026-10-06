@@ -154,7 +154,7 @@ export const AssessmentSessionProvider = ({ children }) => {
   }, [recordWarning, warningDialog?.final]);
 
   useEffect(() => {
-    if (!activeRef.current || /^\/coding\/problems(?:\/|$)/.test(location.pathname)) return;
+    if (!activeRef.current || /^\/(?:coding|debugging)\/problems(?:\/|$)/.test(location.pathname)) return;
     activeRef.current = false;
     endedRef.current = true;
     setAssessmentStarted(false);

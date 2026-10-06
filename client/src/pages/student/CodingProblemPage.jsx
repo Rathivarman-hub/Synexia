@@ -31,13 +31,14 @@ const MIN_EDITOR_HEIGHT = 250;
 const MIN_CONSOLE_HEIGHT = 120;
 const MAX_CONSOLE_RATIO = 0.6;
 
-const draftKey = (slug, language) => `${DRAFT_PREFIX}${slug}:${language}`;
+const draftKey = (slug, language, isDebugging = false) =>
+  `${isDebugging ? 'syn-debug-draft:v1:' : DRAFT_PREFIX}${slug}:${language}`;
 const MIN_SOLUTION_CHANGE = 20;
 
 /** Monospace, whitespace-preserving rendering of a multi-line I/O example. */
 const CodeBlock = ({ text }) => <pre className="coding-io-block">{text === '' ? <em>(empty)</em> : text}</pre>;
 
-const CodingProblemPage = () => {
+const CodingProblemPage = ({ isDebugging = false }) => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { registerAutoSubmit } = useAssessmentSession();
@@ -156,20 +157,32 @@ const CodingProblemPage = () => {
     setSubmitResult(null);
     setConsoleError('');
 
-    api.get(`/coding/problems/${slug}`)
+    api.get(
+      isDebugging ? `/debugging/problems/${slug}` : `/coding/problems/${slug}`,
+      isDebugging ? { params: { language: 'python' } } : undefined
+    )
       .then(({ data }) => {
         if (cancelled) return;
-        setProblem(data.data);
-        setProblemLocked((data.data.totalAttempts || 0) > 0);
+        const loaded = isDebugging
+          ? {
+            ...data.data,
+            statement: data.data.description,
+            testCases: data.data.visibleTestCases || [],
+            starterCode: data.data.languageTemplates || {},
+            starterCodeTemplates: data.data.languageTemplates || {},
+          }
+          : data.data;
+        setProblem(loaded);
+        setProblemLocked((loaded.totalAttempts || 0) > 0);
 
         // Replace an unchanged generic-template draft from older sessions with
         // the problem-specific starter code; keep any student-edited draft.
         const restored = {};
-        const starters = data.data.starterCode || {};
-        const templates = data.data.starterCodeTemplates || {};
-        (data.data.languages || []).forEach((l) => {
+        const starters = loaded.starterCode || {};
+        const templates = loaded.starterCodeTemplates || {};
+        (isDebugging ? [{ key: 'python' }] : loaded.languages || []).forEach((l) => {
           let saved = '';
-          try { saved = localStorage.getItem(draftKey(slug, l.key)) || ''; } catch { saved = ''; }
+          try { saved = localStorage.getItem(draftKey(slug, l.key, isDebugging)) || ''; } catch { saved = ''; }
           restored[l.key] = saved && !isStarterCode(saved, templates[l.key])
             ? saved
             : starters[l.key] || '';
@@ -184,7 +197,7 @@ const CodingProblemPage = () => {
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, isDebugging]);
 
   // ─── Persist drafts ─────────────────────────────────────────────────────────
   // WHY debounced: writing localStorage on every keystroke is a synchronous
@@ -192,10 +205,10 @@ const CodingProblemPage = () => {
   useEffect(() => {
     if (!problem || !code) return undefined;
     const t = setTimeout(() => {
-      try { localStorage.setItem(draftKey(slug, language), code); } catch { /* quota / private mode */ }
+      try { localStorage.setItem(draftKey(slug, language, isDebugging), code); } catch { /* quota / private mode */ }
     }, 800);
     return () => clearTimeout(t);
-  }, [code, language, problem, slug]);
+  }, [code, language, problem, slug, isDebugging]);
 
   // ─── Sandbox health ─────────────────────────────────────────────────────────
   // Checked once per problem view. If the sandbox is unconfigured the Run and
@@ -212,6 +225,33 @@ const CodingProblemPage = () => {
   const languages = problem?.languages || [];
   const currentLanguageLabel = languages.find((l) => l.key === language)?.label || language;
   const sandboxDown = execution !== null && execution.configured === false;
+
+  const selectLanguage = async (nextLanguage) => {
+    setShowLanguageMenu(false);
+    if (isDebugging && !problem?.starterCode?.[nextLanguage]) {
+      try {
+        const { data } = await api.get(`/debugging/problems/${slug}`, { params: { language: nextLanguage } });
+        const template = data.data.languageTemplates?.[nextLanguage] || '';
+        setProblem((current) => ({
+          ...current,
+          starterCode: { [nextLanguage]: template },
+          starterCodeTemplates: { [nextLanguage]: template },
+        }));
+        setCodeByLanguage((current) => {
+          if (current[nextLanguage] !== undefined) return current;
+          let saved = '';
+          try { saved = localStorage.getItem(draftKey(slug, nextLanguage, true)) || ''; } catch { saved = ''; }
+          return { ...current, [nextLanguage]: saved && !isStarterCode(saved, template) ? saved : template };
+        });
+      } catch (err) {
+        toast.error(err.response?.data?.message || `Could not load the ${nextLanguage} template.`);
+        return;
+      }
+    }
+    setLanguage(nextLanguage);
+    setRunResult(null);
+    setSubmitResult(null);
+  };
 
   const handleApiError = useCallback((err, fallback) => {
     const message = err.response?.data?.message || fallback;
@@ -238,7 +278,7 @@ const CodingProblemPage = () => {
     setConsoleError('');
     setSubmitResult(null);
     try {
-      const { data } = await api.post('/coding/run', { problemId: problem._id, language, code });
+      const { data } = await api.post(isDebugging ? '/debugging/run' : '/coding/run', { problemId: problem._id, language, code });
       if (runSeq.current !== seq) return; // a newer run superseded this one
       setRunResult(data.data);
     } catch (err) {
@@ -247,7 +287,7 @@ const CodingProblemPage = () => {
     } finally {
       if (runSeq.current === seq) setRunning(false);
     }
-  }, [problem, running, problemLocked, code, language, handleApiError]);
+  }, [problem, running, problemLocked, code, language, handleApiError, isDebugging]);
 
   // ─── Submit: samples + hidden cases, scored and ranked ─────────────────────
   const executeSubmit = useCallback(async ({ assessment: assessmentMeta = {}, codeOverride } = {}) => {
@@ -262,7 +302,7 @@ const CodingProblemPage = () => {
     setConsoleError('');
     setRunResult(null);
     try {
-      const { data } = await api.post('/coding/submit', {
+      const { data } = await api.post(isDebugging ? '/debugging/submit' : '/coding/submit', {
         problemId: problem._id,
         language,
         code: submissionCode,
@@ -273,16 +313,28 @@ const CodingProblemPage = () => {
       // the student's Status pill. Keeping the stale copy would leave the page
       // claiming "Not attempted" on a problem they just solved.
       try {
-        const { data: fresh } = await api.get(`/coding/problems/${slug}`);
-        setProblem(fresh.data);
-        setProblemLocked((fresh.data.totalAttempts || 0) > 0);
+        const { data: fresh } = await api.get(
+          isDebugging ? `/debugging/problems/${slug}` : `/coding/problems/${slug}`,
+          isDebugging ? { params: { language } } : undefined
+        );
+        const loaded = isDebugging
+          ? {
+            ...fresh.data,
+            statement: fresh.data.description,
+            testCases: fresh.data.visibleTestCases || [],
+            starterCode: fresh.data.languageTemplates || {},
+            starterCodeTemplates: fresh.data.languageTemplates || {},
+          }
+          : fresh.data;
+        setProblem(loaded);
+        setProblemLocked((loaded.totalAttempts || 0) > 0);
       } catch { /* non-fatal: the verdict is already on screen */ }
     } catch (err) {
       handleApiError(err, 'Submission failed.');
     } finally {
       setSubmitting(false);
     }
-  }, [problem, submitting, problemLocked, code, language, slug, handleApiError]);
+  }, [problem, submitting, problemLocked, code, language, slug, handleApiError, isDebugging]);
 
   const submitAssessmentAfterWarning = useCallback(async (assessment) => {
     if (!problem) return;
@@ -383,9 +435,9 @@ const CodingProblemPage = () => {
   const goToNeighbour = useCallback(
     (delta) => {
       const target = neighbour(delta);
-      if (target) navigate(`/coding/problems/${target.slug}`);
+      if (target) navigate(`/${isDebugging ? 'debugging' : 'coding'}/problems/${target.slug}`);
     },
-    [neighbour, navigate]
+    [neighbour, navigate, isDebugging]
   );
 
   const prevProblem = neighbour(-1);
@@ -417,7 +469,7 @@ const CodingProblemPage = () => {
       <div className="coding-center coding-center-full">
         <FiAlertCircle size={40} color="var(--danger)" />
         <h3>{loadError}</h3>
-        <Link to="/coding/problems" className="btn-outline-techiz">
+        <Link to={isDebugging ? '/debugging/problems' : '/coding/problems'} className="btn-outline-techiz">
           <FiChevronLeft /> Back to problems
         </Link>
       </div>
@@ -434,19 +486,20 @@ const CodingProblemPage = () => {
         liveSeconds={liveSeconds}
         now={now}
         onCatalogLoaded={setCatalog}
+        isDebugging={isDebugging}
       />
 
       {/* ─── Centre: problem statement ─── */}
       <section className="coding-pane coding-pane--statement" aria-label="Problem statement">
         <div className="coding-statement-head">
-          <Link to="/coding/problems" className="coding-back">
+          <Link to={isDebugging ? '/debugging/problems' : '/coding/problems'} className="coding-back">
             <FiChevronLeft /> All problems
           </Link>
           <h1 className="coding-title">{problem.title}</h1>
           <div className="coding-meta-row">
             <DifficultyBadge difficulty={problem.difficulty} />
             <span className="coding-points-pill">{problem.points} pts</span>
-            {problem.hiddenCount > 0 && (
+            {!isDebugging && problem.hiddenCount > 0 && (
               <span className="coding-meta-note">{problem.hiddenCount} hidden test{problem.hiddenCount === 1 ? '' : 's'}</span>
             )}
             {problem.totalSubmissions > 0 && (
@@ -496,8 +549,10 @@ const CodingProblemPage = () => {
           {[
             { key: 'description', label: 'Description', icon: FiList },
             { key: 'examples', label: 'Examples', icon: FiInbox },
-            { key: 'submissions', label: 'Submissions', icon: FiClock },
-            { key: 'hints', label: 'Hints', icon: FiHelpCircle },
+            ...(!isDebugging ? [
+              { key: 'submissions', label: 'Submissions', icon: FiClock },
+              { key: 'hints', label: 'Hints', icon: FiHelpCircle },
+            ] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -563,9 +618,9 @@ const CodingProblemPage = () => {
             </>
           )}
 
-          {activeTab === 'submissions' && <SubmissionsTab problemId={problem._id} onReload={handleSubmit} />}
+          {!isDebugging && activeTab === 'submissions' && <SubmissionsTab problemId={problem._id} onReload={handleSubmit} />}
 
-          {activeTab === 'hints' && (
+          {!isDebugging && activeTab === 'hints' && (
             <>
               <h3 className="coding-h3">Hints</h3>
               {problem.hints?.length > 0 ? (
@@ -602,7 +657,7 @@ const CodingProblemPage = () => {
                       role="option"
                       aria-selected={l.key === language}
                       className={l.key === language ? 'is-active' : ''}
-                      onClick={() => { setLanguage(l.key); setShowLanguageMenu(false); setRunResult(null); setSubmitResult(null); }}
+                      onClick={() => { void selectLanguage(l.key); }}
                     >
                       {l.label}
                       {l.key === language && <FiCheck />}
@@ -626,7 +681,7 @@ const CodingProblemPage = () => {
               onClick={() => {
                 const starter = problem.starterCode?.[language] || '';
                 setCode(starter);
-                try { localStorage.removeItem(draftKey(slug, language)); } catch { /* ignore */ }
+                try { localStorage.removeItem(draftKey(slug, language, isDebugging)); } catch { /* ignore */ }
                 setRunResult(null);
                 setSubmitResult(null);
                 toast.info('Editor reset to the starter code.');

@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { normalizeOutput } from '../services/codingGraderService.js';
 import PROBLEMS from '../seedData/codingProblems.js';
+import { isExpectedIncompleteJavaStarter } from '../utils/expectedIncompleteJavaStarter.js';
 
 // ─── Reference solutions ──────────────────────────────────────────────────────
 const REFERENCE = {
@@ -354,8 +355,13 @@ const compileCheck = (title, lang, spec, source) => {
     return;
   }
   if (res.status !== 0) {
+    const diagnostics = `${res.stderr || ''}${res.stdout || ''}`;
+    if (isExpectedIncompleteJavaStarter(lang, source, diagnostics)) {
+      console.log(`EXPECTED-INCOMPLETE ${title} [${lang}] - missing return is the marked student edit`);
+      return;
+    }
     console.log(`FAIL  ${title} [${lang}] starter code does not compile:`);
-    console.log(`       ${(res.stderr || res.stdout || '').split('\n').filter(Boolean).slice(0, 6).join('\n       ')}`);
+    console.log(`       ${diagnostics.split('\n').filter(Boolean).slice(0, 6).join('\n       ')}`);
     failures += 1;
     return;
   }

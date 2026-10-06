@@ -10,6 +10,7 @@
     "seed:coding": "node codingProblemsSeeder.js",
     "seed:coding:reset": "node codingProblemsSeeder.js --reset",
     "verify:coding": "node scripts/verifyCodingCatalogue.js",
+    "test": "node --test",
     "pm2:start": "pm2 start ecosystem.config.cjs --env production",
     "pm2:stop": "pm2 stop techiz-server",
     "pm2:reload": "pm2 reload techiz-server",
@@ -27,7 +28,6 @@
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
-    "csv-parser": "^3.2.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-async-handler": "^1.2.0",
@@ -40,7 +40,6 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.3",
     "morgan": "^1.12.0",
-    "multer": "^2.2.0",
     "rate-limit-redis": "^6.0.1",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0"

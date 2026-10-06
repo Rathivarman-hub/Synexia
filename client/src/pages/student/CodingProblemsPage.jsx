@@ -27,9 +27,10 @@ const SORT_OPTIONS = [
 
 const PAGE_SIZE = 20;
 
-const CodingProblemsPage = () => {
+const CodingProblemsPage = ({ isDebugging = false }) => {
   const [problems, setProblems] = useState([]);
   const [difficulties, setDifficulties] = useState([]);
+  const [pointOptions, setPointOptions] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -42,6 +43,8 @@ const CodingProblemsPage = () => {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [difficulty, setDifficulty] = useState('');
+  const [language, setLanguage] = useState('');
+  const [points, setPoints] = useState('');
   const [sortBy, setSortBy] = useState('order');
   const [sortOrder, setSortOrder] = useState('asc');
 
@@ -56,7 +59,7 @@ const CodingProblemsPage = () => {
 
   // WHY reset to page 1 when a filter changes: page 3 of a filtered set is often
   // empty, and the student would see "no problems" with no obvious cause.
-  useEffect(() => { setPage(1); }, [debouncedSearch, difficulty, sortBy, sortOrder]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, difficulty, language, points, sortBy, sortOrder]);
 
   const fetchProblems = useCallback(async () => {
     setLoading(true);
@@ -65,10 +68,13 @@ const CodingProblemsPage = () => {
       const params = { page, limit: PAGE_SIZE, sortBy, sortOrder };
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (difficulty) params.difficulty = difficulty;
+      if (isDebugging && language) params.language = language;
+      if (isDebugging && points) params.points = points;
 
-      const { data } = await api.get('/coding/problems', { params });
+      const { data } = await api.get(isDebugging ? '/debugging/problems' : '/coding/problems', { params });
       setProblems(data.data || []);
       setTotal(data.total || 0);
+      if (Array.isArray(data.points)) setPointOptions(data.points);
       if (Array.isArray(data.difficulties) && data.difficulties.length) {
         setDifficulties(data.difficulties);
       }
@@ -77,7 +83,7 @@ const CodingProblemsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, difficulty, sortBy, sortOrder]);
+  }, [page, debouncedSearch, difficulty, language, points, sortBy, sortOrder, isDebugging]);
 
   // ─── Fullscreen ref ─────────────────────────────────────────────────────────
   // ─── Start handler ─────────────────────────────────────────────────────────
@@ -109,6 +115,8 @@ const CodingProblemsPage = () => {
   }, [problems]);
 
   const showLandingScreen = !assessmentStarted;
+  const listPath = isDebugging ? '/debugging/problems' : '/coding/problems';
+  const assessmentName = isDebugging ? 'Debugging Assessment' : 'Coding Practice';
 
   // ─── Landing screen ─────────────────────────────────────────────────────────
   if (showLandingScreen) {
@@ -118,17 +126,19 @@ const CodingProblemsPage = () => {
           <div className="coding-hero-content">
             <div className="coding-hero-text">
               <div className="coding-hero-eyebrow">
-                <FiCode /> Coding Practice
+                <FiCode /> {assessmentName}
               </div>
-              <h1 className="coding-hero-title">Coding Problems</h1>
+              <h1 className="coding-hero-title">{isDebugging ? 'Debugging Questions' : 'Coding Problems'}</h1>
               <p className="coding-hero-subtitle">
-                Write full programs · Judged against hidden test cases
+                {isDebugging ? 'Repair code templates · Judged against hidden test cases' : 'Write full programs · Judged against hidden test cases'}
               </p>
             </div>
             <div className="coding-hero-actions">
-              <Link to="/coding/submissions" className="coding-hero-btn coding-hero-btn--primary">
-                <FiList /> My Submissions
-              </Link>
+              {!isDebugging && (
+                <Link to="/coding/submissions" className="coding-hero-btn coding-hero-btn--primary">
+                  <FiList /> My Submissions
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -137,7 +147,7 @@ const CodingProblemsPage = () => {
           <div className="assessment-lock-icon"><FiLock /></div>
           <h2 className="assessment-landing-title">Ready to Begin?</h2>
           <p className="assessment-landing-desc">
-            Click <strong>Start Assessment</strong> to reveal the coding questions.
+            Click <strong>Start Assessment</strong> to reveal the {isDebugging ? 'debugging questions' : 'coding questions'}.
             Work through each problem at your own pace — your progress is saved automatically.
           </p>
           <div className="assessment-info-grid">
@@ -181,17 +191,19 @@ const CodingProblemsPage = () => {
         <div className="coding-hero-content">
           <div className="coding-hero-text">
             <div className="coding-hero-eyebrow">
-              <FiCode /> Coding Practice
+              <FiCode /> {assessmentName}
             </div>
-            <h1 className="coding-hero-title">Coding Problems</h1>
+            <h1 className="coding-hero-title">{isDebugging ? 'Debugging Questions' : 'Coding Problems'}</h1>
             <p className="coding-hero-subtitle">
-              {total} problem{total === 1 ? '' : 's'} · Write full programs · Judged against hidden test cases
+            {total} question{total === 1 ? '' : 's'} · {isDebugging ? 'Repair code templates' : 'Write full programs'} · Judged against hidden test cases
             </p>
           </div>
           <div className="coding-hero-actions">
+            {!isDebugging && (
             <Link to="/coding/submissions" className="coding-hero-btn coding-hero-btn--primary">
               <FiList /> My Submissions
             </Link>
+            )}
           </div>
         </div>
       </div>
@@ -253,23 +265,43 @@ const CodingProblemsPage = () => {
           ))}
         </select>
 
-        <select
+        {isDebugging && (
+          <>
+            <select className="coding-filter-select" value={language}
+              onChange={(e) => setLanguage(e.target.value)} aria-label="Filter by language">
+              <option value="">All Languages</option>
+              {[
+                ['python', 'Python'], ['java', 'Java'], ['javascript', 'JavaScript'], ['c', 'C'],
+                ['cpp', 'C++'], ['csharp', 'C#'], ['go', 'Go'],
+              ].map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+            <select className="coding-filter-select" value={points}
+              onChange={(e) => setPoints(e.target.value)} aria-label="Filter by points">
+              <option value="">All Points</option>
+              {pointOptions.map((value) => (
+                <option key={value} value={value}>{value} points</option>
+              ))}
+            </select>
+          </>
+        )}
+
+        {!isDebugging && <select
           className="coding-filter-select"
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
           aria-label="Sort by"
         >
           {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        </select>}
 
-        <button
+        {!isDebugging && <button
           type="button"
           className="coding-sort-btn"
           onClick={() => setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
           aria-label={`Sort ${sortOrder === 'desc' ? 'ascending' : 'descending'}`}
         >
           {sortOrder === 'desc' ? '↓ High first' : '↑ Low first'}
-        </button>
+        </button>}
       </div>
 
       {/* ─── Error Banner ────────────────────────────────────────────── */}
@@ -288,7 +320,7 @@ const CodingProblemsPage = () => {
           <button
             type="button"
             className="btn-outline-techiz"
-            onClick={() => { setSearch(''); setDifficulty(''); }}
+            onClick={() => { setSearch(''); setDifficulty(''); setLanguage(''); setPoints(''); }}
             style={{ marginTop: 8 }}
           >
             Clear filters
@@ -314,7 +346,7 @@ const CodingProblemsPage = () => {
                 <tr key={p._id}>
                   <td className="coding-row-num">{startIdx + idx + 1}</td>
                   <td className="coding-title-col">
-                    <Link to={`/coding/problems/${p.slug}`} className="coding-title-link">
+                    <Link to={`${listPath}/${p.slug}`} className="coding-title-link">
                       {p.title}
                     </Link>
                     {p.tags?.length > 0 && (
@@ -352,7 +384,7 @@ const CodingProblemsPage = () => {
                   <td className="coding-pts-cell">{p.totalAttempts || 0}</td>
                   <td>
                     <Link
-                      to={`/coding/problems/${p.slug}`}
+                      to={`${listPath}/${p.slug}`}
                       className="btn-techiz coding-solve-btn"
                     >
                       Solve <FiArrowRight />

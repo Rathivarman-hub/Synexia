@@ -21,6 +21,8 @@ import authRoutes from './routes/auth.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import adminRoutes from './routes/admin.js';
 import codingRoutes from './routes/coding.js';
+import debuggingRoutes from './routes/debugging.js';
+import { seedDebuggingProblems } from './services/debuggingProblemSeeder.js';
 
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught Exception', { message: err.message, stack: err.stack });
@@ -107,6 +109,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/coding', codingRoutes);
+app.use('/api/debugging', debuggingRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -116,6 +119,7 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   await connectDB();
   await seedCodingProblems({ preserveExisting: true });
+  await seedDebuggingProblems();
   await connectRedis();
 
   const server = app.listen(PORT, () =>
