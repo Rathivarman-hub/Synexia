@@ -44,7 +44,7 @@ const DebuggingProblemManagementPage = () => {
       const { data } = await api.get('/debugging/admin/problems');
       setProblems(data.data || []);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not load debugging questions.');
+      toast.error(err.response?.data?.message || 'Could not load coding questions.');
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -94,7 +94,7 @@ const DebuggingProblemManagementPage = () => {
       setActiveLanguage('python');
       setShowForm(true);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not open that debugging question.');
+      toast.error(err.response?.data?.message || 'Could not open that coding question.');
     } finally {
       setSaving(false);
     }
@@ -137,10 +137,10 @@ const DebuggingProblemManagementPage = () => {
     try {
       if (editingId) {
         await api.put(`/debugging/admin/problems/${editingId}`, payload);
-        toast.success('Debugging question updated.');
+        toast.success('Coding question updated.');
       } else {
         await api.post('/debugging/admin/problems', payload);
-        toast.success('Debugging question created.');
+        toast.success('Coding question created.');
       }
       closeForm();
       await load();
@@ -192,23 +192,23 @@ const DebuggingProblemManagementPage = () => {
     <div className="page-wrapper admin-page">
       <div className="admin-header">
         <div>
-          <span className="admin-eyebrow">Debugging assessment</span>
-          <h1 className="admin-title">Debugging Questions</h1>
-          <p className="admin-subtitle">Create separate debugging exercises with seven-language templates and private solutions.</p>
+          <span className="admin-eyebrow">Coding assessment</span>
+          <h1 className="admin-title">Coding Questions</h1>
+          <p className="admin-subtitle">Create separate coding exercises with seven-language templates and private solutions.</p>
         </div>
-        <button type="button" className="btn-techiz" onClick={startCreate}><FiPlus /> New debugging question</button>
+        <button type="button" className="btn-techiz" onClick={startCreate}><FiPlus /> New coding question</button>
       </div>
 
       <div className="coding-toolbar-wrap">
-        <select className="coding-filter-select" value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)} aria-label="Filter debugging by difficulty">
+        <select className="coding-filter-select" value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)} aria-label="Filter coding by difficulty">
           <option value="">All Difficulties</option>
           {DIFFICULTIES.map((difficulty) => <option key={difficulty} value={difficulty}>{difficulty}</option>)}
         </select>
-        <select className="coding-filter-select" value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label="Filter debugging by language">
+        <select className="coding-filter-select" value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label="Filter coding by language">
           <option value="">All Languages</option>
           {LANGUAGES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
-        <select className="coding-filter-select" value={pointsFilter} onChange={(event) => setPointsFilter(event.target.value)} aria-label="Filter debugging by points">
+        <select className="coding-filter-select" value={pointsFilter} onChange={(event) => setPointsFilter(event.target.value)} aria-label="Filter coding questions by points">
           <option value="">All Points</option>
           {[...new Set(problems.map((problem) => problem.points))].sort((a, b) => a - b)
             .map((points) => <option key={points} value={points}>{points} points</option>)}
@@ -218,7 +218,7 @@ const DebuggingProblemManagementPage = () => {
       {showForm && (
         <form className="glass-card coding-form-card" onSubmit={save}>
           <div className="coding-form-head">
-            <h2>{editingId ? 'Edit debugging question' : 'New debugging question'}</h2>
+            <h2>{editingId ? 'Edit coding question' : 'New coding question'}</h2>
             <button type="button" className="coding-tool-btn" onClick={closeForm} aria-label="Close form"><FiX /></button>
           </div>
           <div className="coding-form-body coding-form-grid">
@@ -308,7 +308,7 @@ const DebuggingProblemManagementPage = () => {
                 </td>
               </tr>
             ))}
-            {!filteredProblems.length && <tr><td colSpan="7">No debugging questions match those filters.</td></tr>}
+            {!filteredProblems.length && <tr><td colSpan="7">No coding questions match those filters.</td></tr>}
           </tbody>
         </table>
       </div>

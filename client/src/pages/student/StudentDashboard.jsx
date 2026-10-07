@@ -23,7 +23,7 @@ const StudentDashboard = () => {
               </p>
             </Col>
             <Col xs="auto">
-              <Link to="/debugging/problems" className="btn-techiz">Start Debugging <FaArrowRight aria-hidden="true" /></Link>
+              <Link to="/debugging/problems" className="btn-techiz">Start Coding Assessment <FaArrowRight aria-hidden="true" /></Link>
             </Col>
           </Row>
         </div>
@@ -33,13 +33,13 @@ const StudentDashboard = () => {
             <div className="techiz-card dash-coding-card">
               <div className="dash-coding-head">
                 <div>
-                  <h3 className="dash-coding-title"><FiCode aria-hidden="true" /> Debugging Assessment</h3>
+                  <h3 className="dash-coding-title"><FiCode aria-hidden="true" /> Coding Assessment</h3>
                   <p className="dash-coding-subtitle">
-                    Repair incomplete programs and earn points across seven supported languages.
+                    Solve coding problems and earn points across seven supported languages.
                   </p>
                 </div>
                 <Link to="/debugging/problems" className="btn-techiz btn-techiz--sm">
-                  Browse debugging questions <FaArrowRight aria-hidden="true" />
+                  Browse coding questions <FaArrowRight aria-hidden="true" />
                 </Link>
               </div>
             </div>

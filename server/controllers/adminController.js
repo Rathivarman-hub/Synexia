@@ -8,8 +8,10 @@ import DebuggingSubmission from '../models/DebuggingSubmission.js';
 import AssessmentSession from '../models/AssessmentSession.js';
 import AssessmentSubmission from '../models/AssessmentSubmission.js';
 import { Parser } from 'json2csv';
-import { deleteCache, getCache, setCache, deleteCachePattern } from '../utils/cache.js';
+import { deleteCache, deleteCachePattern } from '../utils/cache.js';
 import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
+import { countUniqueQuestions } from '../utils/questionCatalogueStats.js';
+import { getStudentActivityStats } from '../utils/studentActivityStats.js';
 
 /**
  * SYNEXIA - Admin controller
@@ -26,74 +28,6 @@ import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
  * because coding has no single graded attempt per student. `acceptanceRate` is
  * the honest analogue — the share of SUBMISSIONS that the judge accepted.
  */
-
-// ─── Cache TTLs ───────────────────────────────────────────────────────────────
-const STATS_TTL = 120;       // 2 minutes — stats tolerate slight staleness
-const TRENDS_TTL = 300;      // 5 minutes — trends change infrequently
-
-/**
- * Shared per-student coding rollup.
- *
- * WHY one aggregation instead of a per-student query: the previous version ran
- * Assessment.aggregate() once per student, so a 15-row page cost 16 DB round
- * trips and a 500-student page cost 501. Grouping by userId in a single pass is
- * always 1 query regardless of page size.
- *
- * WHY `$addToSet` + `$size` for problemsSolved: re-submitting a solved problem
- * must still read as 1 problem solved, exactly like the per-student stats
- * endpoint. Summing submission rows would inflate it.
- *
- * WHY `bestScore` is a $max and not a $sum: the leaderboard ranks students by
- * total points across DISTINCT solved problems (see codingLeaderboardService),
- * so the admin "best score" column must use the same definition or the two
- * screens will disagree.
- */
-const studentCodingRollup = (userIds) =>
-  CodingSubmission.aggregate([
-    { $match: { isRun: false, ...(userIds ? { userId: { $in: userIds } } : {}) } },
-    {
-      $group: {
-        _id: '$userId',
-        attempts: { $sum: 1 },
-        acceptedSubmissions: {
-          $sum: { $cond: [{ $eq: ['$status', 'accepted'] }, 1, 0] },
-        },
-        bestScore: { $max: '$score' },
-        solvedProblemIds: {
-          $addToSet: {
-            $cond: [{ $eq: ['$status', 'accepted'] }, '$problemId', '$$REMOVE'],
-          },
-        },
-        lastActive: { $max: '$submittedAt' },
-      },
-    },
-    {
-      $project: {
-        attempts: 1,
-        acceptedSubmissions: 1,
-        bestScore: 1,
-        lastActive: 1,
-        problemsSolved: { $size: '$solvedProblemIds' },
-      },
-    },
-  ]);
-
-/** Shape a rollup row for the UI, tolerating a student with no submissions. */
-const EMPTY_CODING_STATS = {
-  attempts: 0,
-  acceptedSubmissions: 0,
-  problemsSolved: 0,
-  bestScore: 0,
-  lastActive: null,
-};
-
-const rollupByUserId = (rows) => {
-  const map = {};
-  rows.forEach((r) => {
-    map[String(r._id)] = r;
-  });
-  return map;
-};
 
 export const deleteStudents = asyncHandler(async (req, res) => {
   const studentIds = req.body.studentIds.map((id) => new mongoose.Types.ObjectId(id));
@@ -145,20 +79,16 @@ export const deleteStudents = asyncHandler(async (req, res) => {
 // @desc    Admin dashboard stats
 // @route   GET /api/admin/stats
 // @access  Admin
-export const getStats = asyncHandler(async (req, res) => {
-  const cacheKey = 'admin:stats';
-  const cached = await getCache(cacheKey);
-  if (cached) return res.json({ success: true, cached: true, data: cached });
-
+export const getStats = asyncHandler(async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   const [
-    studentIds, codingProblems, activeCodingProblems, debuggingProblems, activeDebuggingProblems,
+    studentIds, codingQuestions, debuggingQuestions,
   ] = await Promise.all([
     User.distinct('_id', { role: 'student' }),
-    CodingProblem.countDocuments(),
-    CodingProblem.countDocuments({ isActive: true }),
-    DebuggingProblem.countDocuments(),
-    DebuggingProblem.countDocuments({ isActive: true }),
+    CodingProblem.find().select('statement isActive slug').lean(),
+    DebuggingProblem.find().select('description isActive slug').lean(),
   ]);
+  const questionCounts = countUniqueQuestions(codingQuestions, debuggingQuestions);
   const userFilter = { userId: { $in: studentIds } };
   const [
     codingSubmissions, codingAccepted, debuggingSubmissions, debuggingAccepted,
@@ -185,8 +115,7 @@ export const getStats = asyncHandler(async (req, res) => {
   const data = {
     totalStudents: studentIds.length,
     activeStudents,
-    totalProblems: codingProblems + debuggingProblems,
-    activeProblems: activeCodingProblems + activeDebuggingProblems,
+    ...questionCounts,
     totalSubmissions,
     acceptedSubmissions,
     acceptanceRate: totalSubmissions ? Math.round((acceptedSubmissions / totalSubmissions) * 1000) / 10 : 0,
@@ -194,18 +123,14 @@ export const getStats = asyncHandler(async (req, res) => {
     gradedSubmissions: totalSubmissions,
   };
 
-  await setCache(cacheKey, data, STATS_TTL);
   res.json({ success: true, cached: false, data });
 });
 
 // @desc    Language popularity + per-language acceptance
 // @route   GET /api/admin/language-stats
 // @access  Admin
-export const getLanguageStats = asyncHandler(async (req, res) => {
-  const cacheKey = 'admin:langstats';
-  const cached = await getCache(cacheKey);
-  if (cached) return res.json({ success: true, cached: true, data: cached });
-
+export const getLanguageStats = asyncHandler(async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   // WHY successRate is a computed field rather than $avg of `accuracy`:
   // `accuracy` on a submission is the fraction of THAT attempt's test cases
   // that passed, so averaging it gives "average partial progress", which is not
@@ -264,11 +189,10 @@ export const getLanguageStats = asyncHandler(async (req, res) => {
     }))
     .sort((a, b) => b.submissions - a.submissions);
 
-  await setCache(cacheKey, rows, STATS_TTL);
   res.json({ success: true, cached: false, data: rows });
 });
 
-// @desc    All students with their coding stats
+// @desc    All students with their coding activity stats
 // @route   GET /api/admin/students
 // @access  Admin
 export const getStudents = asyncHandler(async (req, res) => {
@@ -301,57 +225,18 @@ export const getStudents = asyncHandler(async (req, res) => {
       .lean(),
   ]);
 
-  // Scoped to exactly the students on this page — one grouped aggregation, so
-  // the endpoint stays at 2 DB calls total regardless of page size.
-  const [scoped, assessmentRows] = students.length
-    ? await Promise.all([
-      studentCodingRollup(students.map((s) => s._id)),
-      AssessmentSubmission.aggregate([
-        { $match: { submitted: true, userId: { $in: students.map((s) => s._id) } } },
-        {
-          $group: {
-            _id: '$userId',
-            attempts: { $sum: 1 },
-            acceptedSubmissions: { $sum: { $cond: [{ $eq: ['$status', 'accepted'] }, 1, 0] } },
-            bestScore: { $sum: '$score' },
-            solvedQuestions: {
-              $sum: {
-                $size: {
-                  $filter: {
-                    input: '$answers',
-                    as: 'answer',
-                    cond: { $eq: ['$$answer.status', 'accepted'] },
-                  },
-                },
-              },
-            },
-            lastActive: { $max: '$submittedAt' },
-          },
-        },
-      ]),
-    ])
-    : [[], []];
-
-  const statsMap = rollupByUserId(scoped);
-  assessmentRows.forEach((row) => {
-    const key = String(row._id);
-    const existing = statsMap[key] || { ...EMPTY_CODING_STATS, solvedProblemIds: [] };
-    statsMap[key] = {
-      ...existing,
-      attempts: existing.attempts + row.attempts,
-      acceptedSubmissions: existing.acceptedSubmissions + row.acceptedSubmissions,
-      bestScore: existing.bestScore + row.bestScore,
-      problemsSolved: existing.problemsSolved + row.solvedQuestions,
-      lastActive: !existing.lastActive || row.lastActive > existing.lastActive ? row.lastActive : existing.lastActive,
-    };
-  });
+  const statsMap = await getStudentActivityStats(students.map((student) => student._id));
 
   const enriched = students.map((s) => ({
     ...s,
-    // Named `codingStats` rather than the old `assessmentStats`: the client
-    // renders these on the coding drill-down, and keeping the MCQ name would
-    // imply an MCQ meaning that no longer exists.
-    codingStats: statsMap[String(s._id)] || EMPTY_CODING_STATS,
+    codingStats: statsMap[String(s._id)] || {
+      attempts: 0,
+      questionAttempts: 0,
+      acceptedQuestionAttempts: 0,
+      problemsSolved: 0,
+      bestScore: 0,
+      lastActive: null,
+    },
   }));
 
   res.json({
@@ -363,7 +248,7 @@ export const getStudents = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Export students with coding stats as CSV
+// @desc    Export students with coding activity stats as CSV
 // @route   GET /api/admin/export-students
 // @access  Admin
 export const exportStudents = asyncHandler(async (req, res) => {
@@ -382,11 +267,10 @@ export const exportStudents = asyncHandler(async (req, res) => {
     if (students.length === 0) break;
 
     const ids = students.map((s) => s._id);
-    const rows = await studentCodingRollup(ids);
-    const map = rollupByUserId(rows);
+    const activity = await getStudentActivityStats(ids);
 
     students.forEach((s) => {
-      const c = map[String(s._id)] || EMPTY_CODING_STATS;
+      const c = activity[String(s._id)] || {};
       allData.push({
         Name: s.name,
         Email: s.email,
@@ -394,8 +278,9 @@ export const exportStudents = asyncHandler(async (req, res) => {
         RollNumber: s.rollNumber,
         ProblemsSolved: c.problemsSolved,
         Submissions: c.attempts,
-        Accepted: c.acceptedSubmissions,
-        BestScore: c.bestScore,
+        QuestionAttempts: c.questionAttempts,
+        AcceptedQuestionAttempts: c.acceptedQuestionAttempts,
+        BestScorePercent: Math.round(c.bestScore),
         LastActive: c.lastActive,
         JoinedAt: s.createdAt,
       });
@@ -416,11 +301,8 @@ export const exportStudents = asyncHandler(async (req, res) => {
 // @desc    Monthly coding submission trends
 // @route   GET /api/admin/trends
 // @access  Admin
-export const getTrends = asyncHandler(async (req, res) => {
-  const cacheKey = 'admin:trends';
-  const cached = await getCache(cacheKey);
-  if (cached) return res.json({ success: true, cached: true, data: cached });
-
+export const getTrends = asyncHandler(async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   const studentIds = await User.distinct('_id', { role: 'student' });
   const userFilter = { userId: { $in: studentIds } };
   const [codingTrends, debuggingTrends, assessmentTrends] = await Promise.all([CodingSubmission.aggregate([
@@ -491,12 +373,11 @@ export const getTrends = asyncHandler(async (req, res) => {
       acceptanceRate: Math.round((row.accepted / Math.max(row.submissions, 1)) * 1000) / 10,
     }));
 
-  await setCache(cacheKey, trends, TRENDS_TTL);
   res.json({ success: true, cached: false, data: trends });
 });
 
 /**
- * @desc    A single student's coding submissions
+ * @desc    A single student's coding activity history
  * @route   GET /api/admin/students/:studentId/submissions
  * @access  Admin
  *
@@ -518,15 +399,30 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
   const assessmentFilter = { userId: studentId, submitted: true };
   if (typeof status === 'string' && status && status !== 'all') assessmentFilter.status = status;
   const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
-  const [student, codingTotal, assessmentTotal, codingSubmissions, assessmentSubmissions] = await Promise.all([
+  const [
+    student,
+    codingTotal,
+    debuggingTotal,
+    assessmentTotal,
+    codingSubmissions,
+    debuggingSubmissions,
+    assessmentSubmissions,
+  ] = await Promise.all([
     User.findById(studentId).select('name email college rollNumber role').lean(),
     CodingSubmission.countDocuments(filter),
+    DebuggingSubmission.countDocuments(filter),
     AssessmentSubmission.countDocuments(assessmentFilter),
     CodingSubmission.find(filter)
       .populate('problemId', 'title slug difficulty points')
       // `code` is intentionally excluded: the admin drill-down shows the verdict
       // and score, and shipping every student's source to the admin table is an
       // unnecessary data exposure.
+      .select('-code')
+      .sort({ submittedAt: -1 })
+      .limit(safeLimit)
+      .lean(),
+    DebuggingSubmission.find(filter)
+      .populate('problemId', 'title slug difficulty points')
       .select('-code')
       .sort({ submittedAt: -1 })
       .limit(safeLimit)
@@ -546,7 +442,12 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
   const finalAssessmentRows = assessmentSubmissions.map((submission) => ({
     _id: submission._id,
     assessmentType: submission.assessmentType,
-    problemId: { title: `${submission.assessmentType === 'debugging' ? 'Debugging' : 'Coding'} assessment (8 questions)` },
+    problemId: {
+      title: `Coding assessment`,
+    },
+    questionsPassed: submission.answers.filter((answer) => answer.status === 'accepted').length,
+    questionCount: submission.answers.length,
+    activityType: 'Final assessment',
     language: new Set(submission.answers.map((answer) => answer.language)).size > 1
       ? 'Multiple languages'
       : submission.answers[0]?.language || '—',
@@ -561,8 +462,12 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
     executionTime: submission.answers.reduce((sum, answer) => sum + answer.executionTime, 0),
     submittedAt: submission.submittedAt,
   }));
-  const submissions = [...codingSubmissions, ...finalAssessmentRows]
+  const submissions = [
+    ...codingSubmissions.map((submission) => ({ ...submission, activityType: 'Coding question' })),
+    ...debuggingSubmissions.map((submission) => ({ ...submission, activityType: 'Coding question' })),
+    ...finalAssessmentRows,
+  ]
     .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
     .slice(0, safeLimit);
-  res.json({ success: true, total: codingTotal + assessmentTotal, student, data: submissions });
+  res.json({ success: true, total: codingTotal + debuggingTotal + assessmentTotal, student, data: submissions });
 });

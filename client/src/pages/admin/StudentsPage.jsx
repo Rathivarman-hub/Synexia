@@ -217,10 +217,9 @@ const StudentsPage = () => {
                     <th className="th-left" style={{ width: '17%' }}>Email</th>
                     <th className="th-left" style={{ width: '12%' }}>College</th>
                     <th className="th-center" style={{ width: '7%' }}>Roll No.</th>
-                    <th className="th-center" style={{ width: '10%' }}>Solved</th>
-                    <th className="th-center" style={{ width: '8%' }}>Subs.</th>
-                    <th className="th-center" style={{ width: '8%' }}>Accepted</th>
-                    <th className="th-center" style={{ width: '9%' }}>Best Score</th>
+                    <th className="th-center" style={{ width: '10%' }}>Questions Passed</th>
+                    <th className="th-center" style={{ width: '8%' }}>Submissions</th>
+                    <th className="th-center" style={{ width: '9%' }}>Best Score %</th>
                     <th className="th-center" style={{ width: '8%' }}>Joined</th>
                     <th className="th-right" style={{ width: '6%' }}>Actions</th>
                   </tr>
@@ -229,13 +228,7 @@ const StudentsPage = () => {
                   {students.map((s, i) => {
                     const stats = s.codingStats || {};
                     const attempts = Number(stats.attempts ?? 0);
-                    const accepted = Number(stats.acceptedSubmissions ?? 0);
                     const solved = Number(stats.problemsSolved ?? 0);
-                    // WHY a rate and not a raw count of "accepted": a student with
-                    // 1 submission out of 1 accepted and a student with 40 out of
-                    // 40 accepted are both 100%, and a plain ratio of the two
-                    // columns would be a meaningless second "score" number.
-                    const rate = attempts ? Math.round((accepted / attempts) * 100) : 0;
 
                     return (
                       <React.Fragment key={s._id}>
@@ -260,18 +253,7 @@ const StudentsPage = () => {
                           <td className="td-center" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{s.rollNumber || '—'}</td>
                           <td className="td-center" style={{ fontWeight: 700, color: solved > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>{solved}</td>
                           <td className="td-center" style={{ color: 'var(--text-muted)' }}>{attempts}</td>
-                          <td className="td-center">
-                            {attempts > 0 ? (
-                              <span
-                                className="stu-rate-pill"
-                                style={{ color: rate >= 50 ? 'var(--success)' : rate > 0 ? 'var(--warning)' : 'var(--danger)', background: rate >= 50 ? 'rgba(16,185,129,0.15)' : rate > 0 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)' }}
-                                title={`${accepted} of ${attempts} submissions accepted`}
-                              >
-                                {rate}%
-                              </span>
-                            ) : '—'}
-                          </td>
-                          <td className="td-center" style={{ fontWeight: 600, color: 'var(--secondary)' }}>{Number(stats.bestScore ?? 0)}</td>
+                          <td className="td-center" style={{ fontWeight: 600, color: 'var(--secondary)' }}>{Math.round(Number(stats.bestScore ?? 0))}%</td>
                           <td className="td-center" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{new Date(s.createdAt).toLocaleDateString('en-IN')}</td>
                           <td className="td-right">
                             <button
@@ -287,7 +269,7 @@ const StudentsPage = () => {
 
                         {expandedStudent === s._id && (
                           <tr className="stu-drilldown">
-                            <td colSpan={12} style={{ padding: 16 }}>
+                            <td colSpan={11} style={{ padding: 16 }}>
                               {loadingSubs[s._id] ? (
                                 <div className="stu-drilldown-empty">Loading submissions…</div>
                               ) : !submissions[s._id]?.length ? (
@@ -301,7 +283,7 @@ const StudentsPage = () => {
                                       <th>Verdict</th>
                                       <th>Cases</th>
                                       <th>Score</th>
-                                      <th>Assessment</th>
+                                      <th>Activity</th>
                                       <th>Warnings</th>
                                       <th>Time</th>
                                       <th>Submitted</th>
@@ -314,6 +296,11 @@ const StudentsPage = () => {
                                         <tr key={sub._id}>
                                           <td>
                                             {sub.problemId?.title || 'Deleted problem'}
+                                            {sub.assessmentType && (
+                                              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                {sub.questionsPassed}/{sub.questionCount} questions passed
+                                              </div>
+                                            )}
                                             {sub.problemId?.difficulty && (
                                               <span className="stu-sub-difficulty">
                                                 <DifficultyBadge difficulty={sub.problemId.difficulty} size="sm" />
@@ -329,8 +316,8 @@ const StudentsPage = () => {
                                           <td style={{ color: 'var(--text-muted)' }}>{sub.passedCases}/{sub.totalCases}</td>
                                           <td style={{ fontWeight: 600 }}>{sub.score}{sub.maxScore ? `/${sub.maxScore}` : ''}</td>
                                           <td>
-                                            {sub.assessmentType
-                                              ? `${sub.assessmentType === 'debugging' ? 'Debugging' : 'Coding'} final assessment`
+                                            {sub.activityType
+                                              ? sub.activityType
                                               : sub.assessmentReason === 'warning-limit'
                                                 ? 'Submitted Due To Warning Limit'
                                                 : 'Submitted Normally'}

@@ -95,7 +95,13 @@ const AdminDashboard = () => {
   const statCards = [
     { icon: <FiUsers />, label: 'Students', value: stats?.totalStudents || 0, color: BRAND.secondary },
     { icon: <FiUser />, label: 'Active Students', value: stats?.activeStudents || 0, color: BRAND.primary },
-    { icon: <FiCode />, label: 'Problems', value: stats?.activeProblems ?? 0, hint: `${stats?.totalProblems || 0} total`, color: BRAND.warning },
+    {
+      icon: <FiCode />,
+      label: 'Active Questions',
+      value: stats?.activeProblems ?? 0,
+      hint: `${stats?.totalProblems || 0} total · ${stats?.inactiveProblems || 0} inactive`,
+      color: BRAND.warning,
+    },
     { icon: <FiBarChart2 />, label: 'Submissions', value: stats?.totalSubmissions || 0, color: BRAND.success },
     { icon: <FiCheckCircle />, label: 'Acceptance Rate', value: `${stats?.acceptanceRate ?? 0}%`, color: BRAND.danger },
   ];
@@ -174,7 +180,7 @@ const AdminDashboard = () => {
 
         <Row className="g-3 mb-4">
           {[
-            { icon: <FiCode />, label: 'Debugging Questions', to: '/admin/debugging-problems' },
+            { icon: <FiCode />, label: 'Coding Questions', to: '/admin/debugging-problems' },
             { icon: <FiUsers />, label: 'View Students', to: '/admin/students' },
             { icon: <FiTrendingUp />, label: 'Leaderboard', to: '/leaderboard' },
             { icon: <FiSettings />, label: 'Settings', to: '/admin/settings' },

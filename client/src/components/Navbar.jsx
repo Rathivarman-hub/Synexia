@@ -20,7 +20,7 @@ const TechizNavbar = () => {
   const navItems = user?.role === 'admin'
     ? [
         { to: '/admin', label: 'Dashboard' },
-      { to: '/admin/debugging-problems', label: 'Debugging Questions' },
+      { to: '/admin/debugging-problems', label: 'Coding Questions' },
         { to: '/admin/students', label: 'Students' },
         { to: '/admin/profile', label: 'Profile' },
         { to: '/leaderboard', label: 'Leaderboard' },

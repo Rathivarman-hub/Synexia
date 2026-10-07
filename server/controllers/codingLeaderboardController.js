@@ -6,6 +6,7 @@ import DebuggingProblem from '../models/DebuggingProblem.js';
 import CodingSubmission from '../models/CodingSubmission.js';
 import { getCodingLeaderboard, getCodingRank } from '../services/codingLeaderboardService.js';
 import { getCache, setCache, deleteCachePattern } from '../utils/cache.js';
+import { countUniqueQuestions } from '../utils/questionCatalogueStats.js';
 
 const LEADERBOARD_TTL = 60;
 const RANK_TTL = 30;
@@ -17,7 +18,7 @@ const RANK_TTL = 30;
  */
 export const getCodingBoard = asyncHandler(async (req, res) => {
   const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
-  const cacheKey = `coding:leaderboard:students:v5:${limit}`;
+  const cacheKey = `coding:leaderboard:students:v6:${limit}`;
 
   const cached = await getCache(cacheKey);
   if (cached) {
@@ -33,10 +34,10 @@ export const getCodingBoard = asyncHandler(async (req, res) => {
 
   const [rows, codingProblems, debuggingProblems] = await Promise.all([
     getCodingLeaderboard({ limit }),
-    CodingProblem.countDocuments({ isActive: true }),
-    DebuggingProblem.countDocuments({ isActive: true }),
+    CodingProblem.find({ isActive: true }).select('statement isActive slug').lean(),
+    DebuggingProblem.find({ isActive: true }).select('description isActive slug').lean(),
   ]);
-  const totalProblems = codingProblems + debuggingProblems;
+  const { totalProblems } = countUniqueQuestions(codingProblems, debuggingProblems);
 
   const payload = { total: rows.length, totalProblems, data: rows };
   await setCache(cacheKey, payload, LEADERBOARD_TTL);

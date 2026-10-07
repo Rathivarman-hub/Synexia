@@ -143,7 +143,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
 
   const showLandingScreen = !assessmentStarted;
   const listPath = isDebugging ? '/debugging/problems' : '/coding/problems';
-  const assessmentName = isDebugging ? 'Debugging Assessment' : 'Coding Practice';
+  const assessmentName = isDebugging ? 'Coding Assessment' : 'Coding Practice';
 
   // ─── Landing screen ─────────────────────────────────────────────────────────
   if (showLandingScreen) {
@@ -155,9 +155,9 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
               <div className="coding-hero-eyebrow">
                 <FiCode /> {assessmentName}
               </div>
-              <h1 className="coding-hero-title">{isDebugging ? 'Debugging Questions' : 'Coding Problems'}</h1>
+              <h1 className="coding-hero-title">{isDebugging ? 'Coding Questions' : 'Coding Problems'}</h1>
               <p className="coding-hero-subtitle">
-                {isDebugging ? 'Repair code templates · Judged against hidden test cases' : 'Write full programs · Judged against hidden test cases'}
+                Write solutions · Judged against hidden test cases
               </p>
             </div>
             <div className="coding-hero-actions">
@@ -176,7 +176,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
           <p className="assessment-landing-desc">
             {assessmentSubmitted
               ? 'Your assessment has been submitted and is locked. You can reopen each question to review the saved code.'
-              : <>Click <strong>Start Assessment</strong> to reveal 8 {isDebugging ? 'debugging questions' : 'coding questions'}.
+              : <>Click <strong>Start Assessment</strong> to reveal 8 coding questions.
                 Your answers are saved as one final submission when you finish.</>}
           </p>
           <div className="assessment-info-grid">
@@ -239,11 +239,11 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
             <div className="coding-hero-eyebrow">
               <FiCode /> {assessmentName}
             </div>
-            <h1 className="coding-hero-title">{isDebugging ? 'Debugging Questions' : 'Coding Problems'}</h1>
+            <h1 className="coding-hero-title">{isDebugging ? 'Coding Questions' : 'Coding Problems'}</h1>
             <p className="coding-hero-subtitle">
               {assessmentStarted
                 ? `${visibleTotal} assessment questions · 1 hour 30 minutes`
-                : `${total} question${total === 1 ? '' : 's'} · ${isDebugging ? 'Repair code templates' : 'Write full programs'} · Judged against hidden test cases`}
+                : `${total} question${total === 1 ? '' : 's'} · Write solutions · Judged against hidden test cases`}
             </p>
             </div>
             <div className="coding-hero-actions">
