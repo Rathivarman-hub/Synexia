@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import { FiEdit3, FiPlus, FiTrash2, FiX } from 'react-icons/fi';
 import api from '../../api/axios';
 import { DifficultyBadge } from '../../components/DifficultyBadge';
-import './CodingProblemManagementPage.css';
+import './DebuggingProblemManagementPage.css';
 
 const LANGUAGES = [
   ['python', 'Python'], ['java', 'Java'], ['javascript', 'JavaScript'], ['c', 'C'],
@@ -20,8 +20,6 @@ const emptyForm = () => ({
   points: 5,
   languageTemplates: emptyLanguages(),
   boilerplateCode: emptyLanguages(),
-  solutionCode: emptyLanguages(),
-  missingLinePosition: emptyLanguages(),
   sampleInput: '',
   sampleOutput: '',
   visibleTestCases: emptyCases(),
@@ -89,8 +87,6 @@ const DebuggingProblemManagementPage = () => {
         ...current,
         languageTemplates: { ...emptyLanguages(), ...current.languageTemplates },
         boilerplateCode: { ...emptyLanguages(), ...current.boilerplateCode },
-        solutionCode: { ...emptyLanguages(), ...current.solutionCode },
-        missingLinePosition: { ...emptyLanguages(), ...current.missingLinePosition },
         visibleTestCases: current.visibleTestCases?.length ? current.visibleTestCases : [],
         hiddenTestCases: current.hiddenTestCases?.length ? current.hiddenTestCases : [],
       });
@@ -116,8 +112,8 @@ const DebuggingProblemManagementPage = () => {
       toast.error('Enter a title and a description of at least 10 characters.');
       return;
     }
-    if (LANGUAGES.some(([key]) => !form.languageTemplates[key]?.trim() || !form.solutionCode[key]?.trim())) {
-      toast.error('Add both a student template and hidden solution for every supported language.');
+    if (LANGUAGES.some(([key]) => !form.languageTemplates[key]?.trim())) {
+      toast.error('Add a student template for every supported language.');
       return;
     }
     const payload = {
@@ -125,7 +121,6 @@ const DebuggingProblemManagementPage = () => {
       level: Number(form.level),
       points: Number(form.points),
       order: Number(form.order),
-      missingLinePosition: Object.fromEntries(Object.entries(form.missingLinePosition).map(([key, value]) => [key, String(value || '')])),
       visibleTestCases: form.visibleTestCases.filter((testCase) => testCase.input !== '' || testCase.expectedOutput !== ''),
       hiddenTestCases: form.hiddenTestCases.filter((testCase) => testCase.input !== '' || testCase.expectedOutput !== ''),
     };
@@ -267,7 +262,6 @@ const DebuggingProblemManagementPage = () => {
             {[
               ['languageTemplates', 'Student code template'],
               ['boilerplateCode', 'Boilerplate code'],
-              ['solutionCode', 'Hidden expected solution'],
             ].map(([key, label]) => (
               <div className="coding-field coding-field--wide" key={key}>
                 <label className="techiz-label" htmlFor={`debug-${key}`}>{label}</label>
@@ -276,12 +270,6 @@ const DebuggingProblemManagementPage = () => {
                   onChange={(event) => setLanguageField(key, event.target.value)} />
               </div>
             ))}
-            <div className="coding-field coding-field--wide">
-              <label className="techiz-label" htmlFor="debug-position">Missing line position for {LANGUAGES.find(([key]) => key === activeLanguage)?.[1]}</label>
-              <input id="debug-position" type="number" min="1" className="techiz-input"
-                value={form.missingLinePosition[activeLanguage] || ''}
-                onChange={(event) => setLanguageField('missingLinePosition', event.target.value)} />
-            </div>
             <div className="coding-field">
               <label className="techiz-label" htmlFor="debug-sample-in">Sample input</label>
               <textarea id="debug-sample-in" className="techiz-input coding-textarea" rows={3}

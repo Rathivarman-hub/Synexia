@@ -2,6 +2,7 @@ import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import { generateToken } from '../middleware/auth.js';
 import { deleteCache } from '../utils/cache.js';
+import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
 
 // @desc    Register student
 // @route   POST /api/auth/register
@@ -21,6 +22,7 @@ export const register = asyncHandler(async (req, res) => {
   }
 
   const user = await User.create({ name, email, password, college, rollNumber });
+  await invalidateAdminDashboardCache();
 
   res.status(201).json({
     success: true,

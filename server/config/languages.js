@@ -68,35 +68,45 @@ export const getLanguageManifest = () =>
   }));
 
 const GENERIC_TEMPLATES = {
-  python: `# Write your code here
+  python: `def solve():
+    # Write your solution here
+    pass
+
+solve()
 `,
   java: `import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
 
-        // Write your code here
+        // Write your solution here
 
     }
 }
 `,
-  javascript: `// Write your code here
+  javascript: `function solve() {
+
+    // Write your solution here
+
+}
+
+solve();
 `,
   c: `#include <stdio.h>
 
 int main() {
 
-    // Write your code here
+    // Write your solution here
 
     return 0;
 }
 `,
-  cpp: `#include <bits/stdc++.h>
+  cpp: `#include <iostream>
 using namespace std;
 
 int main() {
 
-    // Write your code here
+    // Write your solution here
 
     return 0;
 }
@@ -107,7 +117,7 @@ class Program
 {
     static void Main()
     {
-        // Write your code here
+        // Write your solution here
     }
 }
 `,
@@ -117,7 +127,7 @@ import "fmt"
 
 func main() {
 
-    // Write your code here
+    // Write your solution here
 
 }
 `,

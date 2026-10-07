@@ -6,6 +6,8 @@ import { getUserProblemStatusMap } from '../services/codingLeaderboardService.js
 import { getExecutionStatus, isConfigured } from '../services/codeExecutionService.js';
 import { getCache, setCache, deleteCache, deleteCachePattern } from '../utils/cache.js';
 import logger from '../config/logger.js';
+import { lockProblemIfAssessmentFinalized } from '../services/assessmentLockService.js';
+import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
 
 const SUBMISSIONS_TTL = 60;
 const TIME_LIMIT_MS = Number(process.env.CODE_TIME_LIMIT_MS) || 5000;
@@ -19,7 +21,21 @@ const TIME_LIMIT_MS = Number(process.env.CODE_TIME_LIMIT_MS) || 5000;
 export const runCode = asyncHandler(async (req, res) => {
   const { problemId, language, code, caseIndices } = req.body;
 
-  const existingSubmission = await CodingSubmission.findOne({
+  const assessmentLock = await lockProblemIfAssessmentFinalized({
+    userId: req.user._id,
+    assessmentType: 'coding',
+    problemId,
+  });
+  if (assessmentLock.finalSubmission || assessmentLock.finalizingSession) {
+    res.status(409);
+    throw new Error('This assessment has been submitted and is read-only.');
+  }
+  if (assessmentLock.expiredSession) {
+    res.status(409);
+    throw new Error('The assessment time limit has ended. Your saved answers must be submitted now.');
+  }
+
+  const existingSubmission = assessmentLock.activeSession ? null : await CodingSubmission.findOne({
     userId: req.user._id,
     problemId,
     isRun: false,
@@ -41,32 +57,6 @@ export const runCode = asyncHandler(async (req, res) => {
   }
 
   const result = await runSampleTests(problem, { language, code, caseIndices, timeLimitMs: TIME_LIMIT_MS });
-
-  // WHY isRun rows ARE persisted, but excluded from every aggregate in
-  // codingLeaderboardService (isRun: false filter). Persisting them gives the
-  // student a unified "Run then Submit" history; filtering them there keeps runs
-  // out of acceptance rate and rank. One flag, two responsibilities, no
-  // duplicate collection.
-  await CodingSubmission.create({
-    userId: req.user._id,
-    problemId: problem._id,
-    language,
-    code,
-    status: result.status,
-    passedCases: result.passedCases,
-    failedCases: result.failedCases,
-    totalCases: result.cases.length,
-    accuracy: result.cases.length
-      ? Math.round((result.cases.filter((c) => c.passed).length / result.cases.length) * 1000) / 10
-      : 0,
-    score: 0,
-    maxScore: problem.points,
-    executionTime: result.executionTime,
-    memoryUsageKB: result.memoryUsageKB,
-    output: (result.cases[0]?.output || '').slice(0, 2000),
-    error: (result.cases.find((c) => c.status !== 'ok')?.error || '').slice(0, 2000),
-    isRun: true,
-  });
 
   res.json({
     success: true,
@@ -93,6 +83,16 @@ export const runCode = asyncHandler(async (req, res) => {
 export const submitCode = asyncHandler(async (req, res) => {
   const { problemId, language, code, assessment = {} } = req.body;
   const isWarningLimitSubmission = assessment.reason === 'warning-limit';
+
+  const assessmentLock = await lockProblemIfAssessmentFinalized({
+    userId: req.user._id,
+    assessmentType: 'coding',
+    problemId,
+  });
+  if (assessmentLock.activeSession || assessmentLock.finalizingSession || assessmentLock.finalSubmission) {
+    res.status(409);
+    throw new Error('Assessment questions can only be submitted with the final assessment submission.');
+  }
 
   const existingSubmission = await CodingSubmission.findOne({
     userId: req.user._id,
@@ -201,10 +201,11 @@ export const submitCode = asyncHandler(async (req, res) => {
   // WHY invalidate caches: this submission changed the user's Status column,
   // problem acceptance rate, and student leaderboard data.
   await Promise.all([
+    invalidateAdminDashboardCache(),
     deleteCachePattern('coding:problems:list:*'),
     deleteCache(`coding:problem:${problem.slug}`),
     deleteCachePattern(`coding:leaderboard:*`),
-    deleteCache(`coding:rank:${req.user._id}`),
+    deleteCachePattern('coding:rank:*'),
     deleteCache(`coding:stats:assessment:${req.user._id}`),
   ]);
 

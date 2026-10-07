@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Container, Row, Col } from 'react-bootstrap';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, LineElement, PointElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
-import { FiBarChart2, FiCheckCircle, FiCode, FiPieChart, FiSettings, FiTrendingUp, FiUser, FiUsers } from 'react-icons/fi';
+import { FiBarChart2, FiCheckCircle, FiCode, FiPieChart, FiRefreshCw, FiSettings, FiTrendingUp, FiUser, FiUsers } from 'react-icons/fi';
 import api from '../../api/axios';
 import Spinner from '../../components/Spinner';
 
@@ -43,25 +43,49 @@ const AdminDashboard = () => {
   const [langStats, setLangStats] = useState([]);
   const [trends, setTrends] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const refreshInProgress = useRef(false);
+
+  const fetchDashboard = useCallback(async () => {
+    if (refreshInProgress.current) return;
+    refreshInProgress.current = true;
+    setRefreshing(true);
+    try {
+      const [s, l, t] = await Promise.all([
+        api.get('/admin/stats'),
+        api.get('/admin/language-stats'),
+        api.get('/admin/trends'),
+      ]);
+      setStats(s.data.data);
+      setLangStats(l.data.data);
+      setTrends(t.data.data);
+      setLastUpdated(new Date());
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to load admin dashboard data.');
+    } finally {
+      refreshInProgress.current = false;
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const [s, l, t] = await Promise.all([
-          api.get('/admin/stats'),
-          api.get('/admin/language-stats'),
-          api.get('/admin/trends'),
-        ]);
-        setStats(s.data.data);
-        setLangStats(l.data.data);
-        setTrends(t.data.data);
-      } catch (err) {
-        setError(err.response?.data?.message || 'Unable to load admin dashboard data.');
-      } finally { setLoading(false); }
+    void fetchDashboard();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchDashboard();
+    }, 30000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void fetchDashboard();
     };
-    fetchAll();
-  }, []);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [fetchDashboard]);
 
   if (loading) return <Spinner text="Loading dashboard..." />;
 
@@ -126,8 +150,14 @@ const AdminDashboard = () => {
           <div>
             <div className="admin-eyebrow">Administration</div>
             <h2 className="admin-title">Dashboard</h2>
-            <p className="admin-subtitle">Coding platform overview and performance metrics</p>
+            <p className="admin-subtitle">
+              Coding and debugging platform overview and performance metrics
+              {lastUpdated && ` · Updated ${lastUpdated.toLocaleTimeString()}`}
+            </p>
           </div>
+          <button className="btn-techiz" type="button" onClick={fetchDashboard} disabled={refreshing}>
+            <FiRefreshCw /> {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}
 
@@ -144,7 +174,6 @@ const AdminDashboard = () => {
 
         <Row className="g-3 mb-4">
           {[
-            { icon: <FiCode />, label: 'Coding Questions', to: '/admin/coding-problems' },
             { icon: <FiCode />, label: 'Debugging Questions', to: '/admin/debugging-problems' },
             { icon: <FiUsers />, label: 'View Students', to: '/admin/students' },
             { icon: <FiTrendingUp />, label: 'Leaderboard', to: '/leaderboard' },

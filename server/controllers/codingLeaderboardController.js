@@ -2,6 +2,7 @@ import asyncHandler from 'express-async-handler';
 import mongoose from 'mongoose';
 import { Parser } from 'json2csv';
 import CodingProblem from '../models/CodingProblem.js';
+import DebuggingProblem from '../models/DebuggingProblem.js';
 import CodingSubmission from '../models/CodingSubmission.js';
 import { getCodingLeaderboard, getCodingRank } from '../services/codingLeaderboardService.js';
 import { getCache, setCache, deleteCachePattern } from '../utils/cache.js';
@@ -10,24 +11,32 @@ const LEADERBOARD_TTL = 60;
 const RANK_TTL = 30;
 
 /**
- * @desc    Coding leaderboard — total score, problems solved, accuracy, rank
+ * @desc    Combined coding and debugging leaderboard
  * @route   GET /api/coding/leaderboard
- * @access  Admin
+ * @access  Authenticated
  */
 export const getCodingBoard = asyncHandler(async (req, res) => {
   const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
-  const cacheKey = `coding:leaderboard:students:v2:${limit}`;
+  const cacheKey = `coding:leaderboard:students:v5:${limit}`;
 
   const cached = await getCache(cacheKey);
   if (cached) {
-    res.json({ success: true, cached: true, total: cached.total, data: cached.data });
+    res.json({
+      success: true,
+      cached: true,
+      total: cached.total,
+      totalProblems: cached.totalProblems,
+      data: cached.data,
+    });
     return;
   }
 
-  const [rows, totalProblems] = await Promise.all([
+  const [rows, codingProblems, debuggingProblems] = await Promise.all([
     getCodingLeaderboard({ limit }),
     CodingProblem.countDocuments({ isActive: true }),
+    DebuggingProblem.countDocuments({ isActive: true }),
   ]);
+  const totalProblems = codingProblems + debuggingProblems;
 
   const payload = { total: rows.length, totalProblems, data: rows };
   await setCache(cacheKey, payload, LEADERBOARD_TTL);
@@ -42,7 +51,7 @@ export const exportCodingLeaderboard = asyncHandler(async (_req, res) => {
     { label: 'Rank', value: 'rank' },
     { label: 'Student', value: 'name' },
     { label: 'College', value: 'college' },
-    { label: 'Score', value: 'totalScore' },
+    { label: 'Points', value: 'totalPoints' },
     { label: 'Solved', value: 'problemsSolved' },
     { label: 'Attempted', value: 'problemsAttempted' },
     { label: 'Accuracy', value: 'accuracy' },
@@ -58,7 +67,7 @@ export const exportCodingLeaderboard = asyncHandler(async (_req, res) => {
 /**
  * @desc    The current user's coding rank
  * @route   GET /api/coding/leaderboard/me
- * @access  Admin
+ * @access  Authenticated
  */
 export const getMyCodingRank = asyncHandler(async (req, res) => {
   const cacheKey = `coding:rank:${req.user._id}`;

@@ -37,12 +37,7 @@ const debuggingProblemSchema = new mongoose.Schema(
       validate: { validator: hasEveryLanguage, message: 'A student template is required for every supported language.' },
     },
     boilerplateCode: { type: languageCodeSchema, default: () => ({}) },
-    solutionCode: {
-      type: languageCodeSchema,
-      required: true,
-      select: false,
-      validate: { validator: hasEveryLanguage, message: 'A hidden solution is required for every supported language.' },
-    },
+    solutionCode: { type: languageCodeSchema, select: false },
     missingLinePosition: { type: languageCodeSchema, default: () => ({}) },
     sampleInput: { type: String, default: '', maxlength: 20000 },
     sampleOutput: { type: String, default: '', maxlength: 20000 },

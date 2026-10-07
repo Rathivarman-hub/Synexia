@@ -1,24 +1,13 @@
 import asyncHandler from 'express-async-handler';
 import CodingProblem from '../models/CodingProblem.js';
-import CodingSubmission from '../models/CodingSubmission.js';
 import { getUserProblemStatusMap } from '../services/codingLeaderboardService.js';
 import { getStarterTemplate, getLanguageManifest, LANGUAGE_KEYS } from '../config/languages.js';
 import { CODING_DIFFICULTIES, DIFFICULTY_LABELS } from '../models/CodingProblem.js';
-import { getCache, setCache, deleteCachePattern } from '../utils/cache.js';
-import logger from '../config/logger.js';
+import { getCache, setCache } from '../utils/cache.js';
 
 const LIST_TTL = 120;
 const DETAIL_TTL = 300;
 const escapeRegex = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-
-// WHY: these prefixes are the invalidation contract for the whole module. Every
-// write path in this file must clear them or the catalogue goes stale for up to
-// LIST_TTL seconds — the same discipline questionController already uses.
-const CATALOGUE_CACHE_PREFIXES = ['coding:problems:*', 'coding:problem:*'];
-
-const invalidateCatalogueCache = async () => {
-  await Promise.all(CATALOGUE_CACHE_PREFIXES.map((p) => deleteCachePattern(p)));
-};
 
 const SORTABLE = {
   order: { field: 'order' },
@@ -310,137 +299,6 @@ export const getStarterCode = asyncHandler(async (req, res) => {
       code,
       isTemplate: !doc.starterCode?.[language],
       template: code,
-    },
-  });
-});
-
-/**
- * @desc    Create a coding problem (admin)
- * @route   POST /api/coding/problems
- * @access  Admin
- */
-export const createProblem = asyncHandler(async (req, res) => {
-  const problem = await CodingProblem.create(req.body);
-  await invalidateCatalogueCache();
-  logger.info(`Coding problem created: ${problem.slug} by ${req.user._id}`);
-  res.status(201).json({ success: true, data: problem });
-});
-
-/**
- * @desc    Update a coding problem (admin)
- * @route   PUT /api/coding/problems/:id
- * @access  Admin
- */
-export const updateProblem = asyncHandler(async (req, res) => {
-  const problem = await CodingProblem.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
-
-  if (!problem) {
-    res.status(404);
-    throw new Error('Problem not found');
-  }
-
-  await invalidateCatalogueCache();
-  res.json({ success: true, data: problem });
-});
-
-/**
- * @desc    Delete a coding problem (admin)
- * @route   DELETE /api/coding/problems/:id
- * @access  Admin
- */
-export const deleteProblem = asyncHandler(async (req, res) => {
-  const problem = await CodingProblem.findByIdAndDelete(req.params.id);
-  if (!problem) {
-    res.status(404);
-    throw new Error('Problem not found');
-  }
-
-  // WHY: submissions are NOT deleted. They are the audit trail for the
-  // leaderboard and acceptance stats, and cascading would silently rewrite
-  // historical ranks. They are orphaned and reported instead.
-  const orphaned = await CodingSubmission.countDocuments({ problemId: problem._id });
-
-  await invalidateCatalogueCache();
-  res.json({
-    success: true,
-    message: 'Problem deleted',
-    data: { id: problem._id, slug: problem.slug, orphanedSubmissions: orphaned },
-  });
-});
-
-/**
- * @desc    Append test cases to an existing problem (admin)
- * @route   POST /api/coding/problems/:id/test-cases
- * @access  Admin
- */
-export const addTestCases = asyncHandler(async (req, res) => {
-  const { testCases, hidden = true } = req.body;
-
-  const problem = await CodingProblem.findById(req.params.id);
-  if (!problem) {
-    res.status(404);
-    throw new Error('Problem not found');
-  }
-
-  const incoming = testCases.map((tc) => ({
-    input: tc.input,
-    expectedOutput: tc.expectedOutput,
-    hidden: hidden && tc.hidden !== false,
-  }));
-
-  const before = problem.testCases.length;
-  problem.testCases.push(...incoming);
-  // save() (not update) is required so the pre-validate hook re-syncs hiddenTestCases.
-  await problem.save();
-
-  await invalidateCatalogueCache();
-  res.status(201).json({
-    success: true,
-    message: `Added ${incoming.length} test case${incoming.length === 1 ? '' : 's'}`,
-    data: {
-      id: problem._id,
-      totalTestCases: problem.testCases.length,
-      hiddenTestCases: problem.hiddenTestCases.length,
-      added: incoming.length,
-      before,
-    },
-  });
-});
-
-/**
- * @desc    Admin catalogue stats
- * @route   GET /api/coding/problems-admin/stats
- * @access  Admin
- */
-export const getCodingAdminStats = asyncHandler(async (req, res) => {
-  const [byDifficulty, totals] = await Promise.all([
-    CodingProblem.aggregate([
-      { $match: { isActive: true } },
-      { $group: { _id: '$difficulty', count: { $sum: 1 }, points: { $sum: '$points' } } },
-      { $sort: { count: -1 } },
-    ]),
-    Promise.all([
-      CodingProblem.countDocuments({ isActive: true }),
-      CodingProblem.countDocuments({ isActive: false }),
-      CodingSubmission.countDocuments({ isRun: false }),
-      CodingSubmission.countDocuments({ isRun: false, status: 'accepted' }),
-    ]),
-  ]);
-
-  const [active, inactive, totalSubmissions, acceptedSubmissions] = totals;
-
-  res.json({
-    success: true,
-    data: {
-      activeProblems: active,
-      inactiveProblems: inactive,
-      totalSubmissions,
-      acceptedSubmissions,
-      acceptanceRate: totalSubmissions ? Math.round((acceptedSubmissions / totalSubmissions) * 1000) / 10 : 0,
-      byDifficulty,
     },
   });
 });

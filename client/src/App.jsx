@@ -29,7 +29,6 @@ import SubmissionsPage from './pages/student/SubmissionsPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import StudentsPage from './pages/admin/StudentsPage';
 import SettingsPage from './pages/admin/SettingsPage';
-import CodingProblemManagementPage from './pages/admin/CodingProblemManagementPage';
 import DebuggingProblemManagementPage from './pages/admin/DebuggingProblemManagementPage';
 
 // Layout wrapper to conditionally show sidebar/navbar
@@ -103,7 +102,8 @@ function App() {
               <Route path="/languages" element={<Navigate to="/coding/problems" replace />} />
               <Route path="/assessment/:language" element={<Navigate to="/coding/problems" replace />} />
               <Route path="/results/:id" element={<Navigate to="/coding/problems" replace />} />
-              <Route path="/admin/questions" element={<Navigate to="/admin/coding-problems" replace />} />
+              <Route path="/admin/questions" element={<Navigate to="/admin" replace />} />
+              <Route path="/admin/coding-problems" element={<Navigate to="/admin" replace />} />
 
               <Route
                 path="/profile"
@@ -203,14 +203,6 @@ function App() {
                 element={
                   <AdminRoute>
                     <SettingsPage />
-                  </AdminRoute>
-                }
-              />
-              <Route
-                path="/admin/coding-problems"
-                element={
-                  <AdminRoute>
-                    <CodingProblemManagementPage />
                   </AdminRoute>
                 }
               />

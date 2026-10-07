@@ -1,10 +1,14 @@
 import asyncHandler from 'express-async-handler';
 import DebuggingProblem from '../models/DebuggingProblem.js';
 import DebuggingSubmission from '../models/DebuggingSubmission.js';
-import { LANGUAGE_KEYS, getLanguageManifest } from '../config/languages.js';
+import AssessmentSubmission from '../models/AssessmentSubmission.js';
+import { LANGUAGE_KEYS, getLanguageManifest, getStarterTemplate } from '../config/languages.js';
 import { gradeSubmission, runSampleTests } from '../services/codingGraderService.js';
 import { isConfigured } from '../services/codeExecutionService.js';
 import logger from '../config/logger.js';
+import { lockProblemIfAssessmentFinalized } from '../services/assessmentLockService.js';
+import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
+import { deleteCachePattern } from '../utils/cache.js';
 
 const TIME_LIMIT_MS = Number(process.env.CODE_TIME_LIMIT_MS) || 5000;
 const escapeRegex = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
@@ -34,8 +38,6 @@ const shapePublicProblem = (problem) => ({
   difficulty: problem.difficulty,
   points: problem.points,
   languageTemplates: problem.languageTemplates,
-  boilerplateCode: problem.boilerplateCode,
-  missingLinePosition: problem.missingLinePosition,
   sampleInput: problem.sampleInput,
   sampleOutput: problem.sampleOutput,
   visibleTestCases: visibleTestCasesFor(problem),
@@ -137,16 +139,18 @@ export const getDebuggingProblem = asyncHandler(async (req, res) => {
     res.status(409);
     throw new Error(`No ${language} template is configured for this debugging question.`);
   }
-  const totalAttempts = await DebuggingSubmission.countDocuments({
-    userId: req.user._id,
-    problemId: problem._id,
-    isRun: false,
-  });
+  const [individualAttempts, assessmentAttempts] = await Promise.all([
+    DebuggingSubmission.countDocuments({ userId: req.user._id, problemId: problem._id, isRun: false }),
+    AssessmentSubmission.countDocuments({
+      userId: req.user._id,
+      assessmentType: 'debugging',
+      submitted: true,
+      'answers.questionId': problem._id,
+    }),
+  ]);
   const data = shapePublicProblem(problem);
-  data.languageTemplates = { [language]: problem.languageTemplates?.[language] || '' };
-  data.missingLinePosition = { [language]: problem.missingLinePosition?.[language] || '' };
-  data.totalAttempts = totalAttempts;
-  delete data.boilerplateCode;
+  data.languageTemplates = { [language]: getStarterTemplate(language) };
+  data.totalAttempts = individualAttempts + assessmentAttempts;
   delete data.hiddenCount;
   res.json({ success: true, data });
 });
@@ -156,7 +160,7 @@ export const getDebuggingProgress = asyncHandler(async (req, res) => {
     .select('level title slug difficulty points order')
     .sort({ order: 1, level: 1 })
     .lean();
-  const submissions = await DebuggingSubmission.aggregate([
+  const [submissions, assessmentRows] = await Promise.all([DebuggingSubmission.aggregate([
     { $match: { userId: req.user._id, isRun: false, problemId: { $in: problems.map((problem) => problem._id) } } },
     {
       $group: {
@@ -167,8 +171,30 @@ export const getDebuggingProgress = asyncHandler(async (req, res) => {
         accepted: { $max: { $cond: [{ $eq: ['$status', 'accepted'] }, 1, 0] } },
       },
     },
-  ]);
-  const progress = Object.fromEntries(submissions.map((row) => [String(row._id), row]));
+  ]), AssessmentSubmission.aggregate([
+    { $match: { userId: req.user._id, assessmentType: 'debugging', submitted: true } },
+    { $unwind: '$answers' },
+    { $match: { 'answers.questionId': { $in: problems.map((problem) => problem._id) } } },
+    {
+      $group: {
+        _id: '$answers.questionId',
+        bestScore: { $max: '$answers.score' },
+        maxScore: { $max: '$answers.maxScore' },
+        accepted: { $max: { $cond: [{ $eq: ['$answers.status', 'accepted'] }, 1, 0] } },
+      },
+    },
+  ])]);
+  const progressRows = new Map(submissions.map((row) => [String(row._id), { ...row }]));
+  assessmentRows.forEach((row) => {
+    const key = String(row._id);
+    const existing = progressRows.get(key) || { _id: row._id, bestScore: 0, maxScore: 0, accepted: 0, totalAttempts: 0 };
+    existing.bestScore = Math.max(existing.bestScore || 0, row.bestScore || 0);
+    existing.maxScore = Math.max(existing.maxScore || 0, row.maxScore || 0);
+    existing.accepted = Math.max(existing.accepted || 0, row.accepted || 0);
+    existing.totalAttempts += 1;
+    progressRows.set(key, existing);
+  });
+  const progress = Object.fromEntries([...progressRows].map(([key, row]) => [key, row]));
   res.json({
     success: true,
     data: problems.map((problem) => {
@@ -187,7 +213,22 @@ export const getDebuggingProgress = asyncHandler(async (req, res) => {
 
 export const runDebuggingCode = asyncHandler(async (req, res) => {
   const { problemId, language, code } = req.body;
-  const submitted = await DebuggingSubmission.exists({ userId: req.user._id, problemId, isRun: false });
+  const assessmentLock = await lockProblemIfAssessmentFinalized({
+    userId: req.user._id,
+    assessmentType: 'debugging',
+    problemId,
+  });
+  if (assessmentLock.finalSubmission || assessmentLock.finalizingSession) {
+    res.status(409);
+    throw new Error('This assessment has been submitted and is read-only.');
+  }
+  if (assessmentLock.expiredSession) {
+    res.status(409);
+    throw new Error('The assessment time limit has ended. Your saved answers must be submitted now.');
+  }
+  const submitted = assessmentLock.activeSession
+    ? false
+    : await DebuggingSubmission.exists({ userId: req.user._id, problemId, isRun: false });
   if (submitted) {
     res.status(409);
     throw new Error('This debugging question has already been submitted and is locked.');
@@ -206,29 +247,21 @@ export const runDebuggingCode = asyncHandler(async (req, res) => {
     throw new Error(`No template is configured for ${language}.`);
   }
   const result = await runSampleTests(buildGraderProblem(problem), { language, code, timeLimitMs: TIME_LIMIT_MS });
-  await DebuggingSubmission.create({
-    userId: req.user._id,
-    problemId,
-    language,
-    code,
-    status: result.status || 'wrong-answer',
-    passedCases: result.passedCases || 0,
-    failedCases: result.failedCases || 0,
-    totalCases: result.cases.length,
-    accuracy: result.cases.length ? Math.round((result.passedCases / result.cases.length) * 1000) / 10 : 0,
-    maxScore: problem.points,
-    executionTime: result.executionTime,
-    memoryUsageKB: result.memoryUsageKB,
-    output: (result.cases[0]?.output || '').slice(0, 2000),
-    error: (result.cases.find((testCase) => testCase.status !== 'ok')?.error || '').slice(0, 2000),
-    isRun: true,
-  });
   res.json({ success: true, data: { ...result, language, sampleCount: result.cases.length } });
 });
 
 export const submitDebuggingCode = asyncHandler(async (req, res) => {
   const { problemId, language, code, assessment = {} } = req.body;
   const isWarningLimitSubmission = assessment.reason === 'warning-limit';
+  const assessmentLock = await lockProblemIfAssessmentFinalized({
+    userId: req.user._id,
+    assessmentType: 'debugging',
+    problemId,
+  });
+  if (assessmentLock.activeSession || assessmentLock.finalizingSession || assessmentLock.finalSubmission) {
+    res.status(409);
+    throw new Error('Assessment questions can only be submitted with the final assessment submission.');
+  }
   const existing = await DebuggingSubmission.exists({ userId: req.user._id, problemId, isRun: false });
   if (existing) {
     res.status(409);
@@ -303,6 +336,11 @@ export const submitDebuggingCode = asyncHandler(async (req, res) => {
     { _id: problem._id },
     { $inc: { 'acceptanceStats.totalSubmissions': 1, ...(result.status === 'accepted' ? { 'acceptanceStats.acceptedSubmissions': 1 } : {}) } }
   );
+  await Promise.all([
+    invalidateAdminDashboardCache(),
+    deleteCachePattern('coding:leaderboard:*'),
+    deleteCachePattern('coding:rank:*'),
+  ]);
   logger.info(`Debugging submit: user=${req.user._id} problem=${problem.slug} lang=${language} status=${result.status}`);
   res.status(201).json({
     success: true,
@@ -346,7 +384,7 @@ export const listDebuggingAdminProblems = asyncHandler(async (_req, res) => {
 
 export const getDebuggingAdminProblem = asyncHandler(async (req, res) => {
   const problem = await DebuggingProblem.findById(req.params.id)
-    .select('+solutionCode +hiddenTestCases');
+    .select('+hiddenTestCases');
   if (!problem) {
     res.status(404);
     throw new Error('Debugging question not found');
@@ -357,6 +395,7 @@ export const getDebuggingAdminProblem = asyncHandler(async (req, res) => {
 export const createDebuggingProblem = asyncHandler(async (req, res) => {
   const slug = await slugForCreate(req.body.title);
   const problem = await DebuggingProblem.create({ ...req.body, slug });
+  await invalidateAdminDashboardCache();
   logger.info(`Debugging problem created: ${problem.slug} by ${req.user._id}`);
   res.status(201).json({ success: true, data: problem });
 });
@@ -366,12 +405,13 @@ export const updateDebuggingProblem = asyncHandler(async (req, res) => {
   const problem = await DebuggingProblem.findByIdAndUpdate(req.params.id, updates, {
     new: true,
     runValidators: true,
-    select: '+solutionCode +hiddenTestCases',
+    select: '+hiddenTestCases',
   });
   if (!problem) {
     res.status(404);
     throw new Error('Debugging question not found');
   }
+  await invalidateAdminDashboardCache();
   res.json({ success: true, data: problem });
 });
 
@@ -382,5 +422,6 @@ export const deleteDebuggingProblem = asyncHandler(async (req, res) => {
     throw new Error('Debugging question not found');
   }
   const submissions = await DebuggingSubmission.countDocuments({ problemId: problem._id });
+  await invalidateAdminDashboardCache();
   res.json({ success: true, data: { id: problem._id, orphanedSubmissions: submissions } });
 });

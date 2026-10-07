@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Container } from 'react-bootstrap';
 import { toast } from 'react-toastify';
-import { FiChevronDown, FiChevronLeft, FiChevronRight, FiChevronUp, FiDownload, FiSearch, FiUsers } from 'react-icons/fi';
+import { FiChevronDown, FiChevronLeft, FiChevronRight, FiChevronUp, FiDownload, FiSearch, FiTrash2, FiUsers } from 'react-icons/fi';
 import api from '../../api/axios';
 import Spinner from '../../components/Spinner';
 import { DifficultyBadge } from '../../components/DifficultyBadge';
@@ -48,6 +48,9 @@ const StudentsPage = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const [expandedStudent, setExpandedStudent] = useState(null);
   const [submissions, setSubmissions] = useState({});
@@ -72,13 +75,54 @@ const StudentsPage = () => {
     // Debounced so typing in the search box does not fire a request per keystroke.
     const t = setTimeout(fetch, 300);
     return () => clearTimeout(t);
-  }, [page, search]);
+  }, [page, search, refreshToken]);
 
   // A new search result set invalidates any open drill-down, which was keyed to a
   // student that may no longer be on the page.
   useEffect(() => {
     setExpandedStudent(null);
+    setSelectedStudentIds([]);
   }, [page, search]);
+
+  const pageSelected = students.length > 0 && students.every((student) => selectedStudentIds.includes(student._id));
+  const toggleStudentSelection = (studentId) => {
+    setSelectedStudentIds((selected) => selected.includes(studentId)
+      ? selected.filter((id) => id !== studentId)
+      : [...selected, studentId]);
+  };
+  const togglePageSelection = () => {
+    const visibleIds = new Set(students.map((student) => student._id));
+    setSelectedStudentIds((selected) => pageSelected
+      ? selected.filter((id) => !visibleIds.has(id))
+      : [...new Set([...selected, ...visibleIds])]);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!selectedStudentIds.length || deleting) return;
+    const confirmed = window.confirm(
+      `Permanently delete ${selectedStudentIds.length} selected student${selectedStudentIds.length === 1 ? '' : 's'} and all related submissions, assessment sessions, and final assessments? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const { data } = await api.delete('/admin/students', {
+        data: { studentIds: selectedStudentIds },
+      });
+      toast.success(`${data.deletedCount} student${data.deletedCount === 1 ? '' : 's'} and related records deleted`);
+      setSelectedStudentIds([]);
+      setSubmissions({});
+      setRefreshToken((token) => token + 1);
+      setPage((currentPage) => Math.min(
+        currentPage,
+        Math.max(1, Math.ceil((total - data.deletedCount) / PAGE_SIZE))
+      ));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete selected students');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -131,9 +175,19 @@ const StudentsPage = () => {
             <h2 className="admin-title">Students</h2>
             <p className="admin-subtitle">{total} registered students and their coding activity</p>
           </div>
-          <button className="btn-techiz" onClick={handleExport} disabled={exporting}>
-            <FiDownload /> {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              className="btn-techiz"
+              onClick={handleDeleteSelected}
+              disabled={selectedStudentIds.length === 0 || deleting}
+              style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+            >
+              <FiTrash2 /> {deleting ? 'Deleting...' : `Delete selected${selectedStudentIds.length ? ` (${selectedStudentIds.length})` : ''}`}
+            </button>
+            <button className="btn-techiz" onClick={handleExport} disabled={exporting || deleting}>
+              <FiDownload /> {exporting ? 'Exporting...' : 'Export CSV'}
+            </button>
+          </div>
         </div>
 
         <div className="glass-card mb-4 fade-in" style={{ padding: '14px 20px' }}>
@@ -149,6 +203,15 @@ const StudentsPage = () => {
               <table className="techiz-table admin-table">
                 <thead>
                   <tr>
+                    <th className="th-center" style={{ width: '4%' }}>
+                      <input
+                        type="checkbox"
+                        aria-label="Select all students on this page"
+                        checked={pageSelected}
+                        onChange={togglePageSelection}
+                        disabled={deleting || students.length === 0}
+                      />
+                    </th>
                     <th className="th-center" style={{ width: '3%' }}>#</th>
                     <th className="th-left" style={{ width: '12%' }}>Name</th>
                     <th className="th-left" style={{ width: '17%' }}>Email</th>
@@ -177,6 +240,15 @@ const StudentsPage = () => {
                     return (
                       <React.Fragment key={s._id}>
                         <tr>
+                          <td className="td-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${s.name}`}
+                              checked={selectedStudentIds.includes(s._id)}
+                              onChange={() => toggleStudentSelection(s._id)}
+                              disabled={deleting}
+                            />
+                          </td>
                           <td className="td-center" style={{ color: 'var(--text-muted)' }}>{(page - 1) * PAGE_SIZE + i + 1}</td>
                           <td className="td-left" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</td>
                           <td className="td-left" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: 220 }}>
@@ -215,7 +287,7 @@ const StudentsPage = () => {
 
                         {expandedStudent === s._id && (
                           <tr className="stu-drilldown">
-                            <td colSpan={11} style={{ padding: 16 }}>
+                            <td colSpan={12} style={{ padding: 16 }}>
                               {loadingSubs[s._id] ? (
                                 <div className="stu-drilldown-empty">Loading submissions…</div>
                               ) : !submissions[s._id]?.length ? (
@@ -256,7 +328,13 @@ const StudentsPage = () => {
                                           </td>
                                           <td style={{ color: 'var(--text-muted)' }}>{sub.passedCases}/{sub.totalCases}</td>
                                           <td style={{ fontWeight: 600 }}>{sub.score}{sub.maxScore ? `/${sub.maxScore}` : ''}</td>
-                                          <td>{sub.assessmentReason === 'warning-limit' ? 'Submitted Due To Warning Limit' : 'Submitted Normally'}</td>
+                                          <td>
+                                            {sub.assessmentType
+                                              ? `${sub.assessmentType === 'debugging' ? 'Debugging' : 'Coding'} final assessment`
+                                              : sub.assessmentReason === 'warning-limit'
+                                                ? 'Submitted Due To Warning Limit'
+                                                : 'Submitted Normally'}
+                                          </td>
                                           <td>
                                             <span>{sub.warningCount || 0}/3</span>
                                             {sub.warningEvents?.length > 0 && (

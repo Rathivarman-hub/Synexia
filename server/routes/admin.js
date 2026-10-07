@@ -9,7 +9,10 @@ import {
   exportStudents,
   getTrends,
   getStudentSubmissions,
+  deleteStudents,
 } from '../controllers/adminController.js';
+import { validate } from '../middleware/validate.js';
+import { deleteStudentsSchema } from '../validators/adminValidators.js';
 
 router.use(protect, adminOnly);
 
@@ -22,6 +25,7 @@ router.get('/trends', getTrends);
 // User management (kept feature).
 router.get('/students', getStudents);
 router.get('/export-students', exportStudents);
+router.delete('/students', validate(deleteStudentsSchema), deleteStudents);
 
 // Per-student coding attempt history. Replaces the old
 // GET /students/:id/assessments, which read the deleted Assessment collection.

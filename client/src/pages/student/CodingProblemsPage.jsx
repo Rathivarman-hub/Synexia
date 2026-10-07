@@ -4,6 +4,7 @@ import api from '../../api/axios';
 import { DifficultyBadge, StatusBadge, getDifficultyMeta } from '../../components/DifficultyBadge';
 import InlineSpinner from '../../components/InlineSpinner';
 import { useAssessmentSession } from '../../context/AssessmentSessionContext';
+import AssessmentFinishControl from '../../components/AssessmentFinishControl';
 import {
   FiSearch, FiChevronLeft, FiChevronRight, FiCode,
   FiTrendingUp, FiCheckCircle, FiZap, FiArrowRight, FiList,
@@ -33,11 +34,18 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
   const [pointOptions, setPointOptions] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState('');
-  const { assessmentStarted, startAssessment } = useAssessmentSession();
+  const {
+    assessmentStarted,
+    assessmentQuestions,
+    assessmentSubmission,
+    assessmentSubmitted,
+    assessmentLoaded,
+    startAssessment,
+  } = useAssessmentSession();
 
   // Filters
   const [search, setSearch] = useState('');
@@ -91,9 +99,24 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
     setStarting(true);
     setStartError('');
     try {
-      await startAssessment();
+      const questions = await startAssessment(null, isDebugging ? 'debugging' : 'coding');
+      setPage(1);
+      setSearch('');
+      setDebouncedSearch('');
+      setDifficulty('');
+      setLanguage('');
+      setPoints('');
+      setSortBy('order');
+      setSortOrder('asc');
+      const { data } = await api.get(isDebugging ? '/debugging/problems' : '/coding/problems', {
+        params: isDebugging ? undefined : { page: 1, limit: 50, sortBy: 'order', sortOrder: 'asc' },
+      });
+      const allProblems = data.data || [];
+      const questionSlugs = new Set(questions.map((question) => question.slug));
+      setProblems(allProblems.filter((problem) => questionSlugs.has(problem.slug)));
+      setTotal(questions.length);
     } catch (err) {
-      setStartError(err.message || 'Could not start the assessment. Please try again.');
+      setStartError(err.response?.data?.message || err.message || 'Could not start the assessment. Please try again.');
     } finally {
       setStarting(false);
     }
@@ -101,18 +124,22 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
 
   useEffect(() => { fetchProblems(); }, [fetchProblems]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const visibleProblems = assessmentStarted && assessmentQuestions.length
+    ? problems.filter((problem) => assessmentQuestions.some((question) => question.slug === problem.slug))
+    : problems;
+  const visibleTotal = assessmentStarted ? assessmentQuestions.length : total;
+  const totalPages = assessmentStarted ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
   const startIdx = (page - 1) * PAGE_SIZE;
 
   const stats = useMemo(() => {
-    const solved = problems.filter((p) => p.solved).length;
-    const attempted = problems.filter((p) => p.status === 'attempted').length;
+    const solved = visibleProblems.filter((p) => p.solved).length;
+    const attempted = visibleProblems.filter((p) => p.status === 'attempted').length;
     return {
       solved,
       attempted,
-      points: problems.reduce((s, p) => s + (p.solved ? p.points || 0 : 0), 0),
+      points: visibleProblems.reduce((s, p) => s + (p.solved ? p.points || 0 : 0), 0),
     };
-  }, [problems]);
+  }, [visibleProblems]);
 
   const showLandingScreen = !assessmentStarted;
   const listPath = isDebugging ? '/debugging/problems' : '/coding/problems';
@@ -134,7 +161,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
               </p>
             </div>
             <div className="coding-hero-actions">
-              {!isDebugging && (
+              {!isDebugging && !assessmentStarted && (
                 <Link to="/coding/submissions" className="coding-hero-btn coding-hero-btn--primary">
                   <FiList /> My Submissions
                 </Link>
@@ -147,17 +174,19 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
           <div className="assessment-lock-icon"><FiLock /></div>
           <h2 className="assessment-landing-title">Ready to Begin?</h2>
           <p className="assessment-landing-desc">
-            Click <strong>Start Assessment</strong> to reveal the {isDebugging ? 'debugging questions' : 'coding questions'}.
-            Work through each problem at your own pace — your progress is saved automatically.
+            {assessmentSubmitted
+              ? 'Your assessment has been submitted and is locked. You can reopen each question to review the saved code.'
+              : <>Click <strong>Start Assessment</strong> to reveal 8 {isDebugging ? 'debugging questions' : 'coding questions'}.
+                Your answers are saved as one final submission when you finish.</>}
           </p>
           <div className="assessment-info-grid">
             <div className="assessment-info-item">
               <span className="assessment-info-icon"><FiClock /></span>
-              <span className="assessment-info-text">No time limit</span>
+              <span className="assessment-info-text">1 hour 30 minutes</span>
             </div>
             <div className="assessment-info-item">
               <span className="assessment-info-icon"><FiAward /></span>
-              <span className="assessment-info-text">Points for every solve</span>
+              <span className="assessment-info-text">8 questions</span>
             </div>
             <div className="assessment-info-item">
               <span className="assessment-info-icon"><FiZap /></span>
@@ -169,14 +198,31 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
             type="button"
             className="assessment-start-btn"
             onClick={handleStartAssessment}
-            disabled={starting}
+            disabled={assessmentSubmitted || starting || loading || !assessmentLoaded}
           >
             {starting ? (
               <><span className="assessment-btn-spinner" /> Loading Questions…</>
+            ) : loading ? (
+              <>Loading Questions…</>
+            ) : !assessmentLoaded ? (
+              <>Checking Assessment…</>
+            ) : assessmentSubmitted ? (
+              <>Assessment Submitted</>
             ) : (
               <><FiPlay /> Start Assessment</>
             )}
           </button>
+          {assessmentSubmitted && assessmentQuestions[0] && (
+            <div className="assessment-completed-summary" role="status">
+              <strong>Final score: {assessmentSubmission?.score || 0}/{assessmentSubmission?.maxScore || 0}</strong>
+              <Link
+                to={`${listPath}/${assessmentQuestions[0].slug}`}
+                className="coding-hero-btn coding-hero-btn--primary"
+              >
+                Review submitted code <FiArrowRight />
+              </Link>
+            </div>
+          )}
           {startError && <div className="coding-error-banner" role="alert">{startError}</div>}
         </div>
       </div>
@@ -195,11 +241,14 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
             </div>
             <h1 className="coding-hero-title">{isDebugging ? 'Debugging Questions' : 'Coding Problems'}</h1>
             <p className="coding-hero-subtitle">
-            {total} question{total === 1 ? '' : 's'} · {isDebugging ? 'Repair code templates' : 'Write full programs'} · Judged against hidden test cases
+              {assessmentStarted
+                ? `${visibleTotal} assessment questions · 1 hour 30 minutes`
+                : `${total} question${total === 1 ? '' : 's'} · ${isDebugging ? 'Repair code templates' : 'Write full programs'} · Judged against hidden test cases`}
             </p>
-          </div>
-          <div className="coding-hero-actions">
-            {!isDebugging && (
+            </div>
+            <div className="coding-hero-actions">
+              {assessmentStarted && <AssessmentFinishControl />}
+              {!isDebugging && !assessmentStarted && (
             <Link to="/coding/submissions" className="coding-hero-btn coding-hero-btn--primary">
               <FiList /> My Submissions
             </Link>
@@ -250,6 +299,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search problems"
+            disabled={assessmentStarted}
           />
         </div>
 
@@ -258,6 +308,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
           value={difficulty}
           onChange={(e) => setDifficulty(e.target.value)}
           aria-label="Filter by difficulty"
+          disabled={assessmentStarted}
         >
           <option value="">All Difficulties</option>
           {difficulties.map((d) => (
@@ -268,7 +319,8 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
         {isDebugging && (
           <>
             <select className="coding-filter-select" value={language}
-              onChange={(e) => setLanguage(e.target.value)} aria-label="Filter by language">
+              onChange={(e) => setLanguage(e.target.value)} aria-label="Filter by language"
+              disabled={assessmentStarted}>
               <option value="">All Languages</option>
               {[
                 ['python', 'Python'], ['java', 'Java'], ['javascript', 'JavaScript'], ['c', 'C'],
@@ -276,7 +328,8 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
               ].map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </select>
             <select className="coding-filter-select" value={points}
-              onChange={(e) => setPoints(e.target.value)} aria-label="Filter by points">
+              onChange={(e) => setPoints(e.target.value)} aria-label="Filter by points"
+              disabled={assessmentStarted}>
               <option value="">All Points</option>
               {pointOptions.map((value) => (
                 <option key={value} value={value}>{value} points</option>
@@ -290,6 +343,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
           aria-label="Sort by"
+          disabled={assessmentStarted}
         >
           {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>}
@@ -299,6 +353,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
           className="coding-sort-btn"
           onClick={() => setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
           aria-label={`Sort ${sortOrder === 'desc' ? 'ascending' : 'descending'}`}
+          disabled={assessmentStarted}
         >
           {sortOrder === 'desc' ? '↓ High first' : '↑ Low first'}
         </button>}
@@ -312,7 +367,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
         <div className="coding-center" style={{ minHeight: 320 }}>
           <InlineSpinner label="Loading problems…" />
         </div>
-      ) : problems.length === 0 ? (
+      ) : visibleProblems.length === 0 ? (
         <div className="coding-empty-state">
           <div className="coding-empty-icon"><FiSearch /></div>
           <h3>No problems match those filters</h3>
@@ -342,7 +397,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
               </tr>
             </thead>
             <tbody>
-              {problems.map((p, idx) => (
+              {visibleProblems.map((p, idx) => (
                 <tr key={p._id}>
                   <td className="coding-row-num">{startIdx + idx + 1}</td>
                   <td className="coding-title-col">
@@ -398,7 +453,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
       )}
 
       {/* ─── Pagination ──────────────────────────────────────────────── */}
-      {totalPages > 1 && (
+      {!assessmentStarted && totalPages > 1 && (
         <nav className="coding-pager" aria-label="Pagination">
           <button
             type="button"

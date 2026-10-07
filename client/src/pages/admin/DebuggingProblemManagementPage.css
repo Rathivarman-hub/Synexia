@@ -1,9 +1,7 @@
-/* Admin coding problem management — page-specific layer. */
 @import '../student/coding-shared.css';
 
 .coding-form-card { margin-bottom: 26px; overflow: hidden; }
 
-/* Keep the action heading and controls aligned to the middle of their column. */
 .coding-table th.coding-actions-head,
 .coding-table td.coding-actions-cell {
   text-align: center !important;
@@ -42,8 +40,6 @@
 .coding-field--wide { grid-column: 1 / -1; }
 
 .coding-textarea { resize: vertical; line-height: 1.55; min-height: 70px; }
-/* WHY a monospace font for source: indentation is semantic in code, and a
-   proportional font makes a 4-space indent visually indistinguishable from 1. */
 .coding-code-input {
   font-family: 'Fira Code', monospace;
   font-size: 0.8rem;
@@ -124,7 +120,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 0 0 0;
+  padding: 0;
   overflow: hidden;
 }
 .coding-modal > *:not(.coding-form-head) { margin: 0 20px; }

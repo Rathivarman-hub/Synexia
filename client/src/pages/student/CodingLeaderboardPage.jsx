@@ -78,9 +78,9 @@ const CodingLeaderboardPage = () => {
         <div className="lb-hero-inner">
           <div>
             <div className="lb-hero-eyebrow"><FiAward /> Rankings</div>
-            <h1 className="lb-hero-title">Coding Leaderboard</h1>
+            <h1 className="lb-hero-title">Leaderboard</h1>
             <p className="lb-hero-sub">
-              Ranked by total score · {totalProblems > 0 && `${totalProblems} problem${totalProblems === 1 ? '' : 's'} in play · `}
+              Ranked by points from coding and debugging problems · {totalProblems > 0 && `${totalProblems} problem${totalProblems === 1 ? '' : 's'} in play · `}
               Top {rows.length} coders shown
             </p>
           </div>
@@ -102,7 +102,7 @@ const CodingLeaderboardPage = () => {
         <div className="coding-empty">
           <FiAward size={36} />
           <h3>No scores yet</h3>
-          <p>The leaderboard fills up as students submit solutions.</p>
+          <p>No student accounts are registered yet. Students will appear here with their current scores.</p>
           <Link to="/coding/problems" className="btn-techiz" style={{ marginTop: 8 }}>
             Be the first →
           </Link>
@@ -121,7 +121,7 @@ const CodingLeaderboardPage = () => {
                       : (r.name || '?').charAt(0).toUpperCase()}
                   </div>
                   <div className="lb-podium-name">{r.name || 'Anonymous'}</div>
-                  <div className="lb-podium-score">{r.totalScore}</div>
+                  <div className="lb-podium-score">{Number(r.totalPoints ?? r.totalScore ?? 0).toLocaleString()}</div>
                   <div className="lb-podium-label">points</div>
                   <div className="lb-podium-solved">
                     {r.problemsSolved} solved · {r.accuracy}% acc
@@ -139,7 +139,7 @@ const CodingLeaderboardPage = () => {
                   <th style={{ width: '7%' }}>Rank</th>
                   <th style={{ width: '24%' }}>Student</th>
                   <th style={{ width: '16%' }}>College</th>
-                  <th style={{ width: '12%' }}>Score</th>
+                  <th style={{ width: '12%' }}>Points</th>
                   <th style={{ width: '11%' }}>Solved</th>
                   <th style={{ width: '13%' }}>Accuracy</th>
                   <th style={{ width: '17%' }}>Last active</th>
@@ -165,7 +165,7 @@ const CodingLeaderboardPage = () => {
                         </div>
                       </td>
                       <td className="coding-muted">{r.college || '—'}</td>
-                      <td className="lb-score-cell">{r.totalScore}</td>
+                      <td className="lb-score-cell">{Number(r.totalPoints ?? r.totalScore ?? 0).toLocaleString()} pts</td>
                       <td>
                         {r.problemsSolved}
                         <span className="coding-sub-note">/{r.problemsAttempted} tried</span>

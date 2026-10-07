@@ -7,6 +7,7 @@ import MonacoEditor from '../../components/MonacoEditor';
 import CodeConsole from '../../components/CodeConsole';
 import { DifficultyBadge } from '../../components/DifficultyBadge';
 import ProblemNavigator from '../../components/ProblemNavigator';
+import AssessmentFinishControl from '../../components/AssessmentFinishControl';
 import InlineSpinner from '../../components/InlineSpinner';
 import { useAssessmentSession } from '../../context/AssessmentSessionContext';
 import { useElapsedTimer, useProblemTimeTracker, formatElapsed } from '../../hooks/useElapsedTimer';
@@ -32,7 +33,7 @@ const MIN_CONSOLE_HEIGHT = 120;
 const MAX_CONSOLE_RATIO = 0.6;
 
 const draftKey = (slug, language, isDebugging = false) =>
-  `${isDebugging ? 'syn-debug-draft:v1:' : DRAFT_PREFIX}${slug}:${language}`;
+  `${isDebugging ? 'syn-debug-draft:v2:' : DRAFT_PREFIX}${slug}:${language}`;
 const MIN_SOLUTION_CHANGE = 20;
 
 /** Monospace, whitespace-preserving rendering of a multi-line I/O example. */
@@ -41,10 +42,19 @@ const CodeBlock = ({ text }) => <pre className="coding-io-block">{text === '' ? 
 const CodingProblemPage = ({ isDebugging = false }) => {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { registerAutoSubmit } = useAssessmentSession();
+  const {
+    assessmentQuestions,
+    assessmentAnswers,
+    isAssessmentActive,
+    isAssessmentSubmitted,
+    assessmentSubmitting,
+    recordAssessmentAnswer,
+  } = useAssessmentSession();
 
   const [problem, setProblem] = useState(null);
-  const [language, setLanguage] = useState('python');
+  const [language, setLanguage] = useState(() => {
+    try { return localStorage.getItem(`syn-assessment-language:v1:${slug}`) || 'python'; } catch { return 'python'; }
+  });
   // codeByLanguage keeps every language's draft alive across switches. A single
   // `code` string would silently discard the C++ solution the moment a student
   // peeked at the Python starter.
@@ -72,6 +82,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
 
   const [execution, setExecution] = useState(null);
   const [problemLocked, setProblemLocked] = useState(false);
+  const submissionLocked = isAssessmentSubmitted || assessmentSubmitting || (problemLocked && !isAssessmentActive);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [guardDialog, setGuardDialog] = useState(null);
 
@@ -139,6 +150,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   // WHY a ref for "is this the newest run": a student can hit Run twice quickly,
   // and the slower response must not overwrite the newer verdict.
   const runSeq = useRef(0);
+  const submitSeq = useRef(0);
 
   const readDraftForLanguage = useCallback((languageKey, template) => {
     let saved = '';
@@ -165,10 +177,16 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   // ─── Load the problem ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    runSeq.current += 1;
+    submitSeq.current += 1;
     setLoading(true);
     setLoadError('');
+    setProblem(null);
+    setCodeByLanguage({});
     setRunResult(null);
     setSubmitResult(null);
+    setRunning(false);
+    setSubmitting(false);
     setConsoleError('');
 
     api.get(
@@ -217,12 +235,25 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   // WHY debounced: writing localStorage on every keystroke is a synchronous
   // main-thread disk write and makes typing feel sticky on a large file.
   useEffect(() => {
-    if (!problem || !code) return undefined;
+    if (!problem || problem.slug !== slug || isAssessmentSubmitted || typeof code !== 'string') return undefined;
     const t = setTimeout(() => {
       try { localStorage.setItem(draftKey(slug, language, isDebugging), code); } catch { /* quota / private mode */ }
     }, 800);
     return () => clearTimeout(t);
-  }, [code, language, problem, slug, isDebugging]);
+  }, [code, language, problem, slug, isDebugging, isAssessmentSubmitted]);
+
+  useEffect(() => {
+    if (!isAssessmentActive || !problem || problem.slug !== slug || typeof code !== 'string') return;
+    recordAssessmentAnswer(problem._id, problem.slug, language, code);
+  }, [isAssessmentActive, problem, slug, language, code, recordAssessmentAnswer]);
+
+  useEffect(() => {
+    if (!isAssessmentSubmitted || !problem || problem.slug !== slug) return;
+    const answer = assessmentAnswers[String(problem._id)];
+    if (!answer) return;
+    setLanguage(answer.language);
+    setCodeByLanguage({ [answer.language]: answer.code });
+  }, [isAssessmentSubmitted, assessmentAnswers, problem, slug]);
 
   // ─── Sandbox health ─────────────────────────────────────────────────────────
   // Checked once per problem view. If the sandbox is unconfigured the Run and
@@ -241,26 +272,25 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const sandboxDown = execution !== null && execution.configured === false;
 
   const selectLanguage = async (nextLanguage) => {
+    if (submissionLocked) return;
     setShowLanguageMenu(false);
-    if (isDebugging && !problem?.starterCode?.[nextLanguage]) {
+    if (isDebugging) {
       try {
         const { data } = await api.get(`/debugging/problems/${slug}`, { params: { language: nextLanguage } });
-        const template = data.data.languageTemplates?.[nextLanguage] || '';
+        const template = data.data.languageTemplates?.[nextLanguage];
+        if (!template) throw new Error(`No ${nextLanguage} template was returned.`);
         setProblem((current) => ({
           ...current,
-          starterCode: { [nextLanguage]: template },
-          starterCodeTemplates: { [nextLanguage]: template },
+          starterCode: { ...current.starterCode, [nextLanguage]: template },
+          starterCodeTemplates: { ...current.starterCodeTemplates, [nextLanguage]: template },
         }));
-        setCodeByLanguage((current) => {
-          if (current[nextLanguage] !== undefined) return current;
-          return { ...current, [nextLanguage]: readDraftForLanguage(nextLanguage, template) };
-        });
+        setCodeByLanguage((current) => ({ ...current, [nextLanguage]: template }));
+        try { localStorage.removeItem(draftKey(slug, nextLanguage, true)); } catch { /* private mode */ }
       } catch (err) {
-        toast.error(err.response?.data?.message || `Could not load the ${nextLanguage} template.`);
+        toast.error(err.response?.data?.message || err.message || `Could not load the ${nextLanguage} template.`);
         return;
       }
-    }
-    if (problem?.starterCode?.[nextLanguage] || !isDebugging) {
+    } else {
       setCodeByLanguage((current) => {
         const template = problem?.starterCode?.[nextLanguage] || '';
         if (current[nextLanguage] !== undefined) return current;
@@ -268,6 +298,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
       });
     }
     setLanguage(nextLanguage);
+    try { localStorage.setItem(`syn-assessment-language:v1:${slug}`, nextLanguage); } catch { /* private mode */ }
     setRunResult(null);
     setSubmitResult(null);
   };
@@ -284,7 +315,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
 
   // ─── Run: sample cases only, never scored ──────────────────────────────────
   const executeRun = useCallback(async () => {
-    if (!problem || running || problemLocked) return;
+    if (!problem || running || submissionLocked) return;
     if (!code.trim()) {
       toast.error('Write some code before running.');
       return;
@@ -306,17 +337,19 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     } finally {
       if (runSeq.current === seq) setRunning(false);
     }
-  }, [problem, running, problemLocked, code, language, handleApiError, isDebugging]);
+  }, [problem, running, submissionLocked, code, language, handleApiError, isDebugging]);
 
   // ─── Submit: samples + hidden cases, scored and ranked ─────────────────────
   const executeSubmit = useCallback(async ({ assessment: assessmentMeta = {}, codeOverride } = {}) => {
-    if (!problem || submitting || problemLocked) return;
+    if (!problem || submitting || submissionLocked || isAssessmentActive) return;
     const submissionCode = codeOverride ?? code;
     if (!submissionCode.trim()) {
       toast.error('Write some code before submitting.');
       return;
     }
 
+    const seq = submitSeq.current + 1;
+    submitSeq.current = seq;
     setSubmitting(true);
     setConsoleError('');
     setRunResult(null);
@@ -327,6 +360,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
         code: submissionCode,
         assessment: assessmentMeta,
       });
+      if (submitSeq.current !== seq) return;
       setSubmitResult(data.data);
       // WHY re-fetch: the server just changed this problem's acceptance rate and
       // the student's Status pill. Keeping the stale copy would leave the page
@@ -336,6 +370,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
           isDebugging ? `/debugging/problems/${slug}` : `/coding/problems/${slug}`,
           isDebugging ? { params: { language } } : undefined
         );
+        if (submitSeq.current !== seq) return;
         const loaded = isDebugging
           ? {
             ...fresh.data,
@@ -349,20 +384,12 @@ const CodingProblemPage = ({ isDebugging = false }) => {
         setProblemLocked((loaded.totalAttempts || 0) > 0);
       } catch { /* non-fatal: the verdict is already on screen */ }
     } catch (err) {
+      if (submitSeq.current !== seq) return;
       handleApiError(err, 'Submission failed.');
     } finally {
-      setSubmitting(false);
+      if (submitSeq.current === seq) setSubmitting(false);
     }
-  }, [problem, submitting, problemLocked, code, language, slug, handleApiError, isDebugging]);
-
-  const submitAssessmentAfterWarning = useCallback(async (assessment) => {
-    if (!problem) return;
-    const submissionCode = code.trim() ? code : originalStarterCode;
-    if (!submissionCode.trim()) return;
-    await executeSubmit({ assessment: { ...assessment, reason: 'warning-limit' }, codeOverride: submissionCode });
-  }, [problem, code, originalStarterCode, executeSubmit]);
-
-  useEffect(() => registerAutoSubmit(submitAssessmentAfterWarning), [registerAutoSubmit, submitAssessmentAfterWarning]);
+  }, [problem, submitting, submissionLocked, isAssessmentActive, code, language, slug, handleApiError, isDebugging]);
 
   const guardAction = useCallback((action) => {
     if (starterUnmodified) {
@@ -379,24 +406,24 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   }, [starterUnmodified, changedCodeLength]);
 
   const handleRun = useCallback(() => {
-    if (!problem || running || problemLocked) return;
+    if (!problem || running || submissionLocked) return;
     if (!code.trim()) {
       toast.error('Write some code before running.');
       return;
     }
-    if (guardAction('run')) return;
+    if (!isAssessmentActive && guardAction('run')) return;
     void executeRun();
-  }, [problem, running, problemLocked, code, guardAction, executeRun]);
+  }, [problem, running, submissionLocked, code, isAssessmentActive, guardAction, executeRun]);
 
   const handleSubmit = useCallback(() => {
-    if (!problem || submitting || problemLocked) return;
+    if (!problem || submitting || submissionLocked || isAssessmentActive || isAssessmentSubmitted) return;
     if (!code.trim()) {
       toast.error('Write some code before submitting.');
       return;
     }
     if (guardAction('submit')) return;
     void executeSubmit();
-  }, [problem, submitting, problemLocked, code, guardAction, executeSubmit]);
+  }, [problem, submitting, submissionLocked, isAssessmentActive, isAssessmentSubmitted, code, guardAction, executeSubmit]);
 
   const continueAfterWarning = useCallback(() => {
     const pendingAction = guardDialog?.action;
@@ -479,7 +506,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     return () => window.removeEventListener('keydown', onKey);
   }, [goToNeighbour]);
 
-  if (loading) {
+  if (loading || !problem || problem.slug !== slug) {
     return <div className="coding-center coding-center-full"><InlineSpinner /></div>;
   }
 
@@ -501,6 +528,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
       <ProblemNavigator
         collapsed={navCollapsed}
         onToggle={() => setNavCollapsed((v) => !v)}
+        assessmentQuestions={assessmentQuestions}
         timeSpentByProblem={timeSpentByProblem}
         liveSeconds={liveSeconds}
         now={now}
@@ -538,6 +566,14 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               session {formatElapsed(sessionMs)}
             </span>
           </div>
+          {isAssessmentActive && (
+            <div className="coding-assessment-controls">
+              <span className="coding-assessment-progress">
+                Question {Math.max(1, assessmentQuestions.findIndex((question) => question.slug === slug) + 1)} of {assessmentQuestions.length}
+              </span>
+              <AssessmentFinishControl />
+            </div>
+          )}
 
           <div className="coding-stepper">
             {/* WHY disabled rather than hidden: the student needs to see that a
@@ -662,6 +698,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               type="button"
               className="coding-lang-btn"
               onClick={() => setShowLanguageMenu((v) => !v)}
+              disabled={submissionLocked}
               aria-haspopup="listbox"
               aria-expanded={showLanguageMenu}
             >
@@ -677,6 +714,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
                       aria-selected={l.key === language}
                       className={l.key === language ? 'is-active' : ''}
                       onClick={() => { void selectLanguage(l.key); }}
+                      disabled={submissionLocked}
                     >
                       {l.label}
                       {l.key === language && <FiCheck />}
@@ -693,9 +731,10 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               <span>Starter Code:</span>
               <strong>{starterUnmodified ? 'Not Modified' : 'Modified'}</strong>
             </span>
-            <button
+            {!isAssessmentSubmitted && <button
               type="button"
               className="coding-tool-btn"
+              disabled={submissionLocked}
               title="Reset to the starter code"
               onClick={() => {
                 const starter = problem.starterCode?.[language] || '';
@@ -707,7 +746,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               }}
             >
               <FiRotateCcw />
-            </button>
+            </button>}
             <button
               type="button"
               className="coding-tool-btn"
@@ -728,10 +767,12 @@ const CodingProblemPage = ({ isDebugging = false }) => {
 
         <div className="coding-editor-body">
           <MonacoEditor
+            key={`${problem.slug}:${language}`}
             ref={editorRef}
             value={code}
             onChange={setCode}
             language={language}
+            readOnly={submissionLocked}
             height="100%"
             onRunShortcut={handleRun}
             onSubmitShortcut={handleSubmit}
@@ -779,24 +820,27 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               type="button"
               className="btn-outline-techiz"
               onClick={handleRun}
-              disabled={running || submitting || sandboxDown || problemLocked}
+              disabled={running || submitting || sandboxDown || submissionLocked}
               title="Run against the sample cases (F9)"
             >
               <FiPlay /> {running ? 'Running…' : 'Run'}
             </button>
-            <button
+            {isAssessmentActive ? (
+              <span className="coding-muted coding-assessment-submit-note">Submit the assessment when all 8 answers are ready.</span>
+            ) : !isAssessmentSubmitted && <button
               type="button"
               className="btn-techiz"
               onClick={handleSubmit}
-              disabled={submitting || running || sandboxDown || problemLocked}
+              disabled={submitting || running || sandboxDown || submissionLocked}
               title="Submit for grading (Ctrl + Enter)"
             >
               <FiUploadCloud /> {submitting ? 'Submitting…' : 'Submit'}
-            </button>
+            </button>}
+            {isAssessmentSubmitted && <span className="coding-muted">Final answer is locked and read-only.</span>}
           </div>
         </div>
 
-        {problemLocked && (
+        {problemLocked && !isAssessmentActive && !isAssessmentSubmitted && (
           <div className="coding-locked-note" role="status">
             <FiAlertCircle /> This problem has already been submitted and is locked.
           </div>

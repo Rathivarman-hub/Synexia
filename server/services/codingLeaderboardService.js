@@ -1,8 +1,73 @@
 import mongoose from 'mongoose';
 import CodingSubmission from '../models/CodingSubmission.js';
+import DebuggingSubmission from '../models/DebuggingSubmission.js';
+import User from '../models/User.js';
 
-const bestAttemptPipeline = () => [
-  { $match: { isRun: false, score: { $gt: 0 } } },
+const scoredRowsPipeline = (userFilter = {}) => [
+  {
+    $set: {
+      score: { $convert: { input: '$score', to: 'double', onError: 0, onNull: 0 } },
+      maxScore: { $convert: { input: '$maxScore', to: 'double', onError: 0, onNull: 0 } },
+      passedCases: { $convert: { input: '$passedCases', to: 'double', onError: 0, onNull: 0 } },
+      totalCases: { $convert: { input: '$totalCases', to: 'double', onError: 0, onNull: 0 } },
+    },
+  },
+  { $match: { ...userFilter, isRun: { $ne: true }, score: { $gte: 0 } } },
+  {
+    $unionWith: {
+      coll: DebuggingSubmission.collection.name,
+      pipeline: [
+        {
+          $set: {
+            score: { $convert: { input: '$score', to: 'double', onError: 0, onNull: 0 } },
+            maxScore: { $convert: { input: '$maxScore', to: 'double', onError: 0, onNull: 0 } },
+            passedCases: { $convert: { input: '$passedCases', to: 'double', onError: 0, onNull: 0 } },
+            totalCases: { $convert: { input: '$totalCases', to: 'double', onError: 0, onNull: 0 } },
+          },
+        },
+        { $match: { ...userFilter, isRun: { $ne: true }, score: { $gte: 0 } } },
+      ],
+    },
+  },
+  {
+    $unionWith: {
+      coll: 'assessmentsubmissions',
+      pipeline: [
+        {
+          $match: {
+            ...userFilter,
+            assessmentType: { $in: ['coding', 'debugging'] },
+            submitted: true,
+          },
+        },
+        { $unwind: '$answers' },
+        {
+          $set: {
+            'answers.score': { $convert: { input: '$answers.score', to: 'double', onError: 0, onNull: 0 } },
+            'answers.maxScore': { $convert: { input: '$answers.maxScore', to: 'double', onError: 0, onNull: 0 } },
+            'answers.passedCases': { $convert: { input: '$answers.passedCases', to: 'double', onError: 0, onNull: 0 } },
+            'answers.totalCases': { $convert: { input: '$answers.totalCases', to: 'double', onError: 0, onNull: 0 } },
+          },
+        },
+        {
+          $project: {
+            userId: 1,
+            problemId: '$answers.questionId',
+            score: '$answers.score',
+            maxScore: '$answers.maxScore',
+            passedCases: '$answers.passedCases',
+            totalCases: '$answers.totalCases',
+            executionTime: '$answers.executionTime',
+            submittedAt: 1,
+          },
+        },
+      ],
+    },
+  },
+];
+
+const bestAttemptPipeline = (userFilter = {}) => [
+  ...scoredRowsPipeline(userFilter),
   { $sort: { userId: 1, problemId: 1, score: -1, submittedAt: -1 } },
   {
     $group: {
@@ -34,8 +99,8 @@ const bestAttemptPipeline = () => [
   },
 ];
 
-const userTotalsPipeline = () => [
-  ...bestAttemptPipeline(),
+const userTotalsPipeline = (userFilter = {}) => [
+  ...bestAttemptPipeline(userFilter),
   {
     $group: {
       _id: '$userId',
@@ -75,50 +140,39 @@ const userTotalsPipeline = () => [
   },
 ];
 
-const withUserDetails = () => [
-  {
-    $lookup: {
-      from: 'users',
-      localField: 'userId',
-      foreignField: '_id',
-      as: 'user',
-      // WHY: projection on the lookup. The users collection holds a bcrypt hash;
-      // pulling the whole document to discard 4 fields wastes bandwidth on a
-      // hot, paginated endpoint.
-      pipeline: [{ $project: { name: 1, college: 1, avatar: 1, role: 1 } }],
-    },
-  },
-  { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
-  { $match: { 'user.role': 'student' } },
-  {
-    $project: {
-      _id: 0,
-      userId: 1,
-      name: { $ifNull: ['$user.name', 'Deleted user'] },
-      college: { $ifNull: ['$user.college', ''] },
-      avatar: { $ifNull: ['$user.avatar', ''] },
-      totalScore: 1,
-      problemsSolved: 1,
-      problemsAttempted: 1,
-      accuracy: 1,
-      totalAttempts: 1,
-      lastActivity: 1,
-    },
-  },
-];
-
 /** Top-N coding leaderboard. */
 export const getCodingLeaderboard = async ({ limit = 50 } = {}) => {
-  const rows = await CodingSubmission.aggregate([
-    ...userTotalsPipeline(),
-    ...withUserDetails(),
-    // Tie-break on userId for a deterministic order — without it two users with
-    // identical scores can swap ranks between requests and look like a bug.
-    { $sort: { totalScore: -1, accuracy: -1, problemsSolved: -1, userId: 1 } },
-    { $limit: Math.min(1000000, Math.max(1, Math.floor(limit) || 50)) },
+  const [scoredRows, students] = await Promise.all([
+    CodingSubmission.aggregate(userTotalsPipeline()),
+    User.find({ role: 'student' }).select('name college avatar').sort({ _id: 1 }).lean(),
   ]);
+  const scoreByUser = new Map(scoredRows.map((row) => [String(row.userId), row]));
+  const rows = students.map((student) => {
+    const stats = scoreByUser.get(String(student._id));
+    return {
+      userId: student._id,
+      name: student.name,
+      college: student.college || '',
+      avatar: student.avatar || '',
+      totalScore: stats?.totalScore || 0,
+      totalPoints: stats?.totalScore || 0,
+      problemsSolved: stats?.problemsSolved || 0,
+      problemsAttempted: stats?.problemsAttempted || 0,
+      accuracy: stats?.accuracy || 0,
+      totalAttempts: stats?.totalAttempts || 0,
+      lastActivity: stats?.lastActivity || null,
+    };
+  });
+  rows.sort((a, b) =>
+    b.totalScore - a.totalScore ||
+    b.accuracy - a.accuracy ||
+    b.problemsSolved - a.problemsSolved ||
+    String(a.userId).localeCompare(String(b.userId))
+  );
 
-  return rows.map((row, i) => ({ ...row, rank: i + 1 }));
+  return rows
+    .slice(0, Math.min(1000000, Math.max(1, Math.floor(limit) || 50)))
+    .map((row, i) => ({ ...row, rank: i + 1 }));
 };
 
 /**
@@ -134,8 +188,7 @@ export const getCodingRank = async (userId) => {
   // Step 1 — resolve MY aggregates. This has to finish before step 2, because
   // the "who is ahead of me" predicate is built from these exact values.
   const mine = await CodingSubmission.aggregate([
-    { $match: { userId: oid, isRun: false, score: { $gt: 0 } } },
-    ...userTotalsPipeline().slice(1),
+    ...userTotalsPipeline({ userId: oid }),
   ]);
 
   const stats = mine[0] || {
@@ -166,16 +219,27 @@ export const getCodingRank = async (userId) => {
     ],
   };
 
-  const [ahead, total] = await Promise.all([
+  const [ahead, totalStudents, studentsBefore, scoredStudentsBefore] = await Promise.all([
     CodingSubmission.aggregate([...userTotalsPipeline(), { $match: aheadPredicate }, { $count: 'ahead' }]),
-    CodingSubmission.aggregate([...userTotalsPipeline(), { $count: 'total' }]),
+    User.countDocuments({ role: 'student' }),
+    User.countDocuments({ role: 'student', _id: { $lt: oid } }),
+    CodingSubmission.aggregate([
+      ...userTotalsPipeline(),
+      { $match: { userId: { $lt: oid } } },
+      { $count: 'count' },
+    ]),
   ]);
 
-  const boardSize = total[0]?.total || 0;
+  const boardSize = totalStudents;
   if (boardSize === 0) return EMPTY;
 
+  const hasNoScore = stats.totalScore === 0 && stats.accuracy === 0 && stats.problemsSolved === 0;
+  const unscoredStudentsBefore = hasNoScore
+    ? Math.max(0, studentsBefore - (scoredStudentsBefore[0]?.count || 0))
+    : 0;
+
   return {
-    rank: (ahead[0]?.ahead || 0) + 1,
+    rank: (ahead[0]?.ahead || 0) + unscoredStudentsBefore + 1,
     total: boardSize,
     totalScore: stats.totalScore,
     problemsSolved: stats.problemsSolved,
@@ -188,7 +252,32 @@ export const getCodingRank = async (userId) => {
 export const getUserProblemStatusMap = async (userId, problemIds) => {
   if (!problemIds.length) return {};
   const rows = await CodingSubmission.aggregate([
-    { $match: { userId: new mongoose.Types.ObjectId(String(userId)), isRun: false, problemId: { $in: problemIds } } },
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(String(userId)),
+        isRun: false,
+        problemId: { $in: problemIds },
+      },
+    },
+    {
+      $unionWith: {
+        coll: 'assessmentsubmissions',
+        pipeline: [
+          { $match: { userId: new mongoose.Types.ObjectId(String(userId)), assessmentType: 'coding', submitted: true } },
+          { $unwind: '$answers' },
+          { $match: { 'answers.questionId': { $in: problemIds } } },
+          {
+            $project: {
+              problemId: '$answers.questionId',
+              score: '$answers.score',
+              maxScore: '$answers.maxScore',
+              status: '$answers.status',
+              submittedAt: 1,
+            },
+          },
+        ],
+      },
+    },
     {
       $group: {
         _id: '$problemId',

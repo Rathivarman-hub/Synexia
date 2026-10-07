@@ -4,6 +4,7 @@ import { FiCheck, FiCircle, FiTarget, FiChevronLeft, FiChevronRight } from 'reac
 import { getDifficultyMeta } from './DifficultyBadge';
 import api from '../api/axios';
 import { formatElapsed } from '../hooks/useElapsedTimer';
+import { useAssessmentSession } from '../context/AssessmentSessionContext';
 import './ProblemNavigator.css';
 
 /**
@@ -34,6 +35,7 @@ const ProblemNavigator = ({
   isDebugging = false,
 }) => {
   const { slug: currentSlug } = useParams();
+  const { assessmentQuestions } = useAssessmentSession();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +49,13 @@ const ProblemNavigator = ({
         if (cancelled) return;
         // The endpoint is ordered server-side by (order, points) — the same order
         // the catalogue page uses — so the rail is a stable numbered list.
-        setRows(data.data || []);
+        const catalogue = data.data || [];
+        const questionOrder = new Map(assessmentQuestions.map((question, index) => [question.slug, index]));
+        setRows(assessmentQuestions.length
+          ? catalogue
+            .filter((problem) => questionOrder.has(problem.slug))
+            .sort((a, b) => questionOrder.get(a.slug) - questionOrder.get(b.slug))
+          : catalogue);
       })
       .catch(() => {
         // A failed navigator must not take the workspace down: the student can
@@ -61,7 +69,7 @@ const ProblemNavigator = ({
     return () => {
       cancelled = true;
     };
-  }, [isDebugging]);
+  }, [assessmentQuestions, isDebugging]);
 
   // Publish the ordering to the parent for previous/next navigation.
   useEffect(() => {

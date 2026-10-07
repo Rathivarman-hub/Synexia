@@ -11,7 +11,6 @@ const Sidebar = () => {
 
   const adminLinks = [
     { to: '/admin', label: 'Dashboard', icon: FiHome },
-    { to: '/admin/coding-problems', label: 'Coding Questions', icon: FiCode },
     { to: '/admin/debugging-problems', label: 'Debugging Questions', icon: FiCode },
     { to: '/admin/students', label: 'Students', icon: FiUsers },
     { to: '/leaderboard', label: 'Leaderboard', icon: FiAward },

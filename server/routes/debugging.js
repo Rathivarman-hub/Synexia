@@ -12,6 +12,10 @@ import {
   createDebuggingProblemSchema, updateDebuggingProblemSchema,
   runDebuggingCodeSchema, submitDebuggingCodeSchema, listDebuggingProblemsQuerySchema,
 } from '../validators/debuggingValidators.js';
+import { recordAssessmentWarningSchema, submitAssessmentSchema } from '../validators/assessmentValidators.js';
+import {
+  getMyAssessment, recordAssessmentWarning, startAssessment, submitAssessment,
+} from '../controllers/assessmentController.js';
 
 const router = express.Router();
 
@@ -36,6 +40,10 @@ router.get('/problems/:slug', protect, getDebuggingProblem);
 router.get('/stats/me/problems', protect, getDebuggingProgress);
 router.post('/run', protect, codeLimiter, validate(runDebuggingCodeSchema), runDebuggingCode);
 router.post('/submit', protect, codeLimiter, validate(submitDebuggingCodeSchema), submitDebuggingCode);
+router.post('/assessment/start', protect, startAssessment('debugging'));
+router.get('/assessment/me', protect, getMyAssessment('debugging'));
+router.post('/assessment/warning', protect, validate(recordAssessmentWarningSchema), recordAssessmentWarning('debugging'));
+router.post('/assessment/submit', protect, codeLimiter, validate(submitAssessmentSchema), submitAssessment('debugging'));
 
 router.get('/admin/problems', protect, adminOnly, listDebuggingAdminProblems);
 router.get('/admin/problems/:id', protect, adminOnly, getDebuggingAdminProblem);

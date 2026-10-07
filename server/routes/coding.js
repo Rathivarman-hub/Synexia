@@ -4,10 +4,7 @@ const router = express.Router();
 import { protect, adminOnly } from '../middleware/auth.js';
 import { codeLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
-import {
-  getProblems, getProblem, getStarterCode, createProblem, updateProblem,
-  deleteProblem, addTestCases, getCodingAdminStats,
-} from '../controllers/codingProblemController.js';
+import { getProblems, getProblem, getStarterCode } from '../controllers/codingProblemController.js';
 import {
   runCode, submitCode, getMySubmissions, getSubmission, getMyCodingStats,
   getMyProblemProgress, getExecutionStatusRoute,
@@ -15,10 +12,12 @@ import {
 import {
   getCodingBoard, getMyCodingRank, getStudentCodingReport, exportCodingLeaderboard, flushCodingCache,
 } from '../controllers/codingLeaderboardController.js';
+import { runCodeSchema, submitCodeSchema } from '../validators/codingValidators.js';
+import { submitAssessmentSchema } from '../validators/assessmentValidators.js';
 import {
-  createCodingProblemSchema, updateCodingProblemSchema, addTestCasesSchema,
-  runCodeSchema, submitCodeSchema,
-} from '../validators/codingValidators.js';
+  getMyAssessment, recordAssessmentWarning, startAssessment, submitAssessment,
+} from '../controllers/assessmentController.js';
+import { recordAssessmentWarningSchema } from '../validators/assessmentValidators.js';
 
 // ─── Public catalogue (any authenticated user) ────────────────────────────────
 router.get('/problems', protect, getProblems);
@@ -32,6 +31,10 @@ router.get('/problems/:slug/starter', protect, getStarterCode);
 // entire lab) instead of being folded into the general 200/min IP limit.
 router.post('/run', protect, codeLimiter, validate(runCodeSchema), runCode);
 router.post('/submit', protect, codeLimiter, validate(submitCodeSchema), submitCode);
+router.post('/assessment/start', protect, startAssessment('coding'));
+router.get('/assessment/me', protect, getMyAssessment('coding'));
+router.post('/assessment/warning', protect, validate(recordAssessmentWarningSchema), recordAssessmentWarning('coding'));
+router.post('/assessment/submit', protect, codeLimiter, validate(submitAssessmentSchema), submitAssessment('coding'));
 
 router.get('/submissions/me', protect, getMySubmissions);
 router.get('/submissions/:id', protect, getSubmission);
@@ -40,30 +43,12 @@ router.get('/stats/me', protect, getMyCodingStats);
 router.get('/stats/me/problems', protect, getMyProblemProgress);
 router.get('/execution-status', protect, getExecutionStatusRoute);
 
-router.get('/leaderboard', protect, adminOnly, getCodingBoard);
-router.get('/leaderboard/me', protect, adminOnly, getMyCodingRank);
+router.get('/leaderboard', protect, getCodingBoard);
+router.get('/leaderboard/me', protect, getMyCodingRank);
 
-// ─── Admin management ─────────────────────────────────────────────────────────
-// WHY: mounted AFTER the public routes above. `/:slug` would otherwise shadow
-// these and an admin POST to /admin/stats would be parsed as a slug lookup.
-router.get('/admin/stats', protect, adminOnly, getCodingAdminStats);
+// ─── Admin leaderboard reporting ──────────────────────────────────────────────
 router.get('/admin/students/:studentId', protect, adminOnly, getStudentCodingReport);
 router.get('/admin/leaderboard/export', protect, adminOnly, exportCodingLeaderboard);
 router.post('/admin/cache/flush', protect, adminOnly, flushCodingCache);
-
-router.route('/admin/problems')
-  .post(protect, adminOnly, validate(createCodingProblemSchema), createProblem);
-
-router.route('/admin/problems/:id')
-  .put(protect, adminOnly, validate(updateCodingProblemSchema), updateProblem)
-  .delete(protect, adminOnly, deleteProblem);
-
-router.post(
-  '/admin/problems/:id/test-cases',
-  protect,
-  adminOnly,
-  validate(addTestCasesSchema),
-  addTestCases
-);
 
 export default router;

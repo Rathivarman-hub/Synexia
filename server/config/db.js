@@ -1,6 +1,17 @@
 import mongoose from 'mongoose';
 import logger from './logger.js';
 import dns from 'dns';
+import AssessmentSession from '../models/AssessmentSession.js';
+import AssessmentSubmission from '../models/AssessmentSubmission.js';
+
+const ensureModelCollection = async (model) => {
+  try {
+    await model.createCollection();
+  } catch (error) {
+    if (error.code !== 48 && error.codeName !== 'NamespaceExists') throw error;
+  }
+  await model.init();
+};
 
 const connectDB = async () => {
   try {
@@ -13,6 +24,10 @@ const connectDB = async () => {
       heartbeatFrequencyMS: 10000,
       retryWrites: true,
     });
+    await Promise.all([
+      ensureModelCollection(AssessmentSession),
+      ensureModelCollection(AssessmentSubmission),
+    ]);
 
     logger.info(`✅ MongoDB Connected: ${conn.connection.host}`);
 

@@ -20,7 +20,7 @@ const TechizNavbar = () => {
   const navItems = user?.role === 'admin'
     ? [
         { to: '/admin', label: 'Dashboard' },
-        { to: '/admin/coding-problems', label: 'Problems' },
+      { to: '/admin/debugging-problems', label: 'Debugging Questions' },
         { to: '/admin/students', label: 'Students' },
         { to: '/admin/profile', label: 'Profile' },
         { to: '/leaderboard', label: 'Leaderboard' },
@@ -36,8 +36,8 @@ const TechizNavbar = () => {
       ];
 
   // WHY the longest-prefix rule and not a plain `startsWith`: with plain
-  // startsWith, "/admin/coding-problems" would light up BOTH "Dashboard" (/admin)
-  // and "Problems". Taking the LONGEST matching prefix makes exactly one item
+  // startsWith, a nested admin route would light up BOTH "Dashboard" (/admin)
+  // and the nested item. Taking the LONGEST matching prefix makes exactly one item
   // active, while still keeping a section lit while you are inside it
   // (e.g. "Practice" stays active on /coding/problems/:slug).
   const isActive = (to) => {
