@@ -110,12 +110,12 @@ const problems = PROBLEMS;
 const expectedProblems = [
   ['Sum of Odd Numbers in an Array', 'easy', 5],
   ['Find Missing Number in an Array', 'easy', 7],
-  ['Reverse Integer', 'easy', 10],
-  ['Check Palindrome Number', 'easy', 12],
-  ['Search Element in Array', 'easy', 15],
-  ['Find Second Largest Distinct Element', 'easy', 16],
-  ['Count Vowels in String', 'easy', 17],
-  ['Move All Zeros To End', 'easy', 18],
+  ['Reverse Integer', 'medium', 10],
+  ['Check Palindrome Number', 'medium', 12],
+  ['Search Element in Array', 'medium', 15],
+  ['Find Second Largest Distinct Element', 'hard', 16],
+  ['Count Vowels in String', 'hard', 17],
+  ['Move All Zeros To End', 'hard', 18],
 ];
 
 for (const [index, [title, difficulty, points]] of expectedProblems.entries()) {

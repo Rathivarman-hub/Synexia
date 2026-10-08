@@ -8,6 +8,8 @@ export const SUBMISSION_STATUSES = [
   'compile-error',
   'time-limit-exceeded',
   'internal-error',
+  'not-attempted',
+  'not-evaluated',
 ];
 
 const codingSubmissionSchema = new mongoose.Schema(
@@ -72,8 +74,6 @@ const codingSubmissionSchema = new mongoose.Schema(
       type: [{ type: { type: String, required: true }, occurredAt: { type: Date, required: true } }],
       default: [],
     },
-    elapsedSeconds: { type: Number, default: 0, min: 0 },
-
     submittedAt: { type: Date, default: Date.now, index: true },
   },
   { timestamps: true }

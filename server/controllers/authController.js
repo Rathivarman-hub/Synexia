@@ -8,11 +8,11 @@ import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
 // @route   POST /api/auth/register
 // @access  Public
 export const register = asyncHandler(async (req, res) => {
-  const { name, email, password, college, rollNumber } = req.body;
+  const { name, email, password, college, teamHeadMobileNumber } = req.body;
 
-  if (!name || !email || !password) {
+  if (!name || !email || !password || !teamHeadMobileNumber) {
     res.status(400);
-    throw new Error('Please provide name, email and password');
+    throw new Error('Please provide team name, email, team head mobile number and password');
   }
 
   const userExists = await User.findOne({ email });
@@ -21,7 +21,7 @@ export const register = asyncHandler(async (req, res) => {
     throw new Error('User with this email already exists');
   }
 
-  const user = await User.create({ name, email, password, college, rollNumber });
+  const user = await User.create({ name, email, password, college, teamHeadMobileNumber });
   await invalidateAdminDashboardCache();
 
   res.status(201).json({
@@ -32,6 +32,7 @@ export const register = asyncHandler(async (req, res) => {
       email: user.email,
       role: user.role,
       college: user.college,
+      teamHeadMobileNumber: user.teamHeadMobileNumber,
       rollNumber: user.rollNumber,
       avatar: user.avatar,
       token: generateToken(user._id),
@@ -64,6 +65,7 @@ export const login = asyncHandler(async (req, res) => {
       email: user.email,
       role: user.role,
       college: user.college,
+      teamHeadMobileNumber: user.teamHeadMobileNumber,
       rollNumber: user.rollNumber,
       avatar: user.avatar,
       token: generateToken(user._id),
@@ -85,10 +87,11 @@ export const getMe = asyncHandler(async (req, res) => {
 // @access  Private
 export const updateProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-  const { name, college, rollNumber, password, avatar } = req.body;
+  const { name, college, teamHeadMobileNumber, rollNumber, password, avatar } = req.body;
 
   if (name) user.name = name;
   if (college) user.college = college;
+  if (teamHeadMobileNumber) user.teamHeadMobileNumber = teamHeadMobileNumber;
   if (rollNumber) user.rollNumber = rollNumber;
   if (password) user.password = password;
 
@@ -120,6 +123,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
       email: updated.email,
       role: updated.role,
       college: updated.college,
+      teamHeadMobileNumber: updated.teamHeadMobileNumber,
       rollNumber: updated.rollNumber,
       avatar: updated.avatar,
     },

@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true, minlength: 6 },
     role: { type: String, enum: ['student', 'admin'], default: 'student' },
     college: { type: String, default: '' },
+    teamHeadMobileNumber: { type: String, default: '', trim: true },
     rollNumber: { type: String, default: '' },
     avatar: { type: String, default: '' },
   },

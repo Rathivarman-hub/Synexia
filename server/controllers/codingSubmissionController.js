@@ -8,6 +8,7 @@ import { getCache, setCache, deleteCache, deleteCachePattern } from '../utils/ca
 import logger from '../config/logger.js';
 import { lockProblemIfAssessmentFinalized } from '../services/assessmentLockService.js';
 import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
+import { evaluateAssessmentAnswer } from '../services/assessmentEvaluationService.js';
 
 const SUBMISSIONS_TTL = 60;
 const TIME_LIMIT_MS = Number(process.env.CODE_TIME_LIMIT_MS) || 5000;
@@ -19,7 +20,7 @@ const TIME_LIMIT_MS = Number(process.env.CODE_TIME_LIMIT_MS) || 5000;
  * @access  Private (student)
  */
 export const runCode = asyncHandler(async (req, res) => {
-  const { problemId, language, code, caseIndices } = req.body;
+  const { problemId, language, code, caseIndices, assessmentSessionId } = req.body;
 
   const assessmentLock = await lockProblemIfAssessmentFinalized({
     userId: req.user._id,
@@ -56,7 +57,17 @@ export const runCode = asyncHandler(async (req, res) => {
     throw new Error('Problem not found');
   }
 
-  const result = await runSampleTests(problem, { language, code, caseIndices, timeLimitMs: TIME_LIMIT_MS });
+  const result = assessmentLock.activeSession
+    ? await evaluateAssessmentAnswer({
+      assessmentType: 'coding',
+      userId: req.user._id,
+      sessionId: assessmentSessionId,
+      problemId,
+      language,
+      code,
+      timeLimitMs: TIME_LIMIT_MS,
+    })
+    : await runSampleTests(problem, { language, code, caseIndices, timeLimitMs: TIME_LIMIT_MS });
 
   res.json({
     success: true,
@@ -65,12 +76,17 @@ export const runCode = asyncHandler(async (req, res) => {
       cases: result.cases,
       status: result.status,
       passedCases: result.passedCases,
+      passedTests: result.passedTests,
       failedCases: result.failedCases,
+      accepted: result.accepted,
+      awardedPoints: result.awardedPoints,
+      fullAssessment: result.fullAssessment === true,
       executionTime: result.executionTime,
       memoryUsageKB: result.memoryUsageKB,
-      // Sample coverage only — the client shows this so the user understands that
-      // "Run" is not a verdict. Never disclose the hidden count's expected values.
-      sampleCount: result.cases.length,
+      // Public runs remain sample-only; assessment runs reveal only the hidden-case verdicts.
+      ...(result.fullAssessment
+        ? { totalTests: result.totalTests }
+        : { sampleCount: result.cases.length }),
     },
   });
 });
@@ -180,7 +196,6 @@ export const submitCode = asyncHandler(async (req, res) => {
     assessmentReason: isWarningLimitSubmission ? 'warning-limit' : 'normal',
     warningCount: Math.min(3, Math.max(0, Number(assessment.warningCount) || 0)),
     warningEvents: Array.isArray(assessment.warningEvents) ? assessment.warningEvents.slice(0, 3) : [],
-    elapsedSeconds: Math.max(0, Number(assessment.elapsedSeconds) || 0),
     submittedAt: new Date(),
   });
 
@@ -323,6 +338,17 @@ export const getMyCodingStats = asyncHandler(async (req, res) => {
     CodingSubmission.aggregate([
       { $match: { userId: req.user._id, isRun: false } },
       {
+        $set: {
+          score: {
+            $cond: [
+              { $and: [{ $eq: ['$status', 'accepted'] }, { $gt: ['$totalCases', 0] }, { $eq: ['$passedCases', '$totalCases'] }] },
+              '$maxScore',
+              0,
+            ],
+          },
+        },
+      },
+      {
         $group: {
           _id: '$problemId',
           bestScore: { $max: '$score' },
@@ -362,7 +388,14 @@ export const getMyCodingStats = asyncHandler(async (req, res) => {
     codingScore: ownScore.codingScore,
     totalAttempts: ownScore.totalAttempts,
     acceptedSubmissions,
-    recentSubmissions: recent,
+    recentSubmissions: recent.map((submission) => ({
+      ...submission,
+      score: submission.status === 'accepted'
+        && submission.totalCases > 0
+        && submission.passedCases === submission.totalCases
+        ? submission.maxScore
+        : 0,
+    })),
   };
 
   await setCache(cacheKey, payload, SUBMISSIONS_TTL);

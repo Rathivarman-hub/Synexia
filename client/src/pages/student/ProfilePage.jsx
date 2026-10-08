@@ -33,7 +33,6 @@ const ProfilePage = () => {
         canvas.height = Math.max(1, Math.round(image.height * scale));
         canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
         const compressedAvatar = canvas.toDataURL('image/jpeg', 0.82);
-        localStorage.setItem('techiz-avatar', compressedAvatar);
         setAvatar(compressedAvatar);
       };
       image.onerror = () => toast.error('Could not read this image');
@@ -47,11 +46,18 @@ const ProfilePage = () => {
     if (form.password && form.password !== form.confirmPassword) { toast.error('Passwords do not match'); return; }
     setSaving(true);
     try {
-      const payload = { name: form.name, college: form.college, rollNumber: form.rollNumber, avatar };
+      const isLocalImage = avatar.startsWith('data:image/');
+      const payload = { name: form.name, college: form.college, rollNumber: form.rollNumber };
+      if (!isLocalImage) payload.avatar = avatar;
       if (form.password) payload.password = form.password;
       const { data } = await api.put('/auth/me', payload);
-      updateUser({ ...data.data, avatar: data.data.avatar || avatar });
-      toast.success('Profile updated successfully');
+      const updatedAvatar = isLocalImage ? avatar : data.data.avatar || '';
+      updateUser({ ...data.data, avatar: updatedAvatar });
+      if (isLocalImage) {
+        toast.info('Profile updated. Profile photos must use a hosted image URL to sync with your account.');
+      } else {
+        toast.success('Profile updated successfully');
+      }
       setForm((f) => ({ ...f, password: '', confirmPassword: '' }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Update failed');

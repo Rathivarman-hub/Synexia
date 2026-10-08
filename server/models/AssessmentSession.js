@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { LANGUAGE_KEYS } from '../config/languages.js';
 
 const assessmentSessionSchema = new mongoose.Schema(
   {
@@ -22,6 +23,22 @@ const assessmentSessionSchema = new mongoose.Schema(
         _id: false,
         type: { type: String, required: true },
         occurredAt: { type: Date, required: true },
+      }],
+      default: [],
+    },
+    evaluations: {
+      type: [{
+        _id: false,
+        problemId: { type: mongoose.Schema.Types.ObjectId },
+        questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
+        language: { type: String, enum: LANGUAGE_KEYS, required: true },
+        code: { type: String, maxlength: 20000, required: true },
+        status: { type: String, required: true },
+        passedTests: { type: Number, min: 0, required: true },
+        totalTests: { type: Number, min: 0, required: true },
+        accepted: { type: Boolean, required: true },
+        awardedPoints: { type: Number, min: 0, required: true },
+        evaluatedAt: { type: Date, required: true },
       }],
       default: [],
     },

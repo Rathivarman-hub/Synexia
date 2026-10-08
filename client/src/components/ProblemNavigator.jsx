@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom';
 import { FiCheck, FiCircle, FiTarget, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { getDifficultyMeta } from './DifficultyBadge';
 import api from '../api/axios';
-import { formatElapsed } from '../hooks/useElapsedTimer';
 import { useAssessmentSession } from '../context/AssessmentSessionContext';
 import './ProblemNavigator.css';
 
@@ -26,9 +25,6 @@ import './ProblemNavigator.css';
  * request for one payload. The rail loads it once and hands it up.
  */
 const ProblemNavigator = ({
-  timeSpentByProblem = {},
-  liveSeconds,
-  now,
   onCatalogLoaded,
   collapsed,
   onToggle,
@@ -59,7 +55,7 @@ const ProblemNavigator = ({
       })
       .catch(() => {
         // A failed navigator must not take the workspace down: the student can
-        // still read the statement, run and submit. Only the rail degrades.
+        // still read the statement, run code and submit the assessment. Only the rail degrades.
         if (!cancelled) setRows([]);
       })
       .finally(() => {
@@ -148,11 +144,6 @@ const ProblemNavigator = ({
         {!loading &&
           rows.map((r, i) => {
             const meta = getDifficultyMeta(r.difficulty);
-            // WHY liveSeconds first: the problem currently open has its time in
-            // the running segment, not yet in timeSpentByProblem, so reading the
-            // banked map alone would show 0:00 for the very problem the student
-            // is working on. `now` is the shared per-second tick.
-            const seconds = liveSeconds ? liveSeconds(r._id, now) : timeSpentByProblem[r._id] || 0;
             return (
               <li key={r._id}>
                 <Link
@@ -171,12 +162,6 @@ const ProblemNavigator = ({
                       {r.difficultyLabel || meta.label}
                       <span className="pn-sep">·</span>
                       {r.points} pts
-                      {seconds > 0 && (
-                        <>
-                          <span className="pn-sep">·</span>
-                          {formatElapsed(seconds * 1000)}
-                        </>
-                      )}
                     </span>
                   </span>
                 </Link>

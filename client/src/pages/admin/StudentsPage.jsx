@@ -38,6 +38,8 @@ const STATUS_TONE = {
   'compile-error': { color: 'var(--danger)', bg: 'rgba(239, 68, 68, 0.15)', label: 'Compile error' },
   'time-limit-exceeded': { color: 'var(--warning)', bg: 'rgba(245, 158, 11, 0.15)', label: 'Time limit' },
   'internal-error': { color: 'var(--text-muted)', bg: 'rgba(112, 121, 145, 0.15)', label: 'Internal error' },
+  'not-attempted': { color: 'var(--text-muted)', bg: 'rgba(112, 121, 145, 0.15)', label: 'Not attempted' },
+  'not-evaluated': { color: 'var(--warning)', bg: 'rgba(245, 158, 11, 0.15)', label: 'Not evaluated' },
 };
 const toneFor = (status) => STATUS_TONE[status] || { color: 'var(--text-muted)', bg: 'rgba(112,121,145,0.15)', label: status || 'unknown' };
 
@@ -297,9 +299,30 @@ const StudentsPage = () => {
                                           <td>
                                             {sub.problemId?.title || 'Deleted problem'}
                                             {sub.assessmentType && (
-                                              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                                {sub.questionsPassed}/{sub.questionCount} questions passed
-                                              </div>
+                                              <>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                  {sub.questionsPassed}/{sub.questionCount} questions accepted
+                                                </div>
+                                                <details style={{ marginTop: 6 }}>
+                                                  <summary>Question results</summary>
+                                                  <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
+                                                    {(sub.questionResults || []).map((question, index) => {
+                                                      const questionTone = toneFor(question.status);
+                                                      return (
+                                                        <div key={`${question.title}-${index}`} style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                          <strong style={{ color: 'var(--text-primary)' }}>{question.title}</strong>
+                                                          {' · '}
+                                                          <span style={{ color: questionTone.color }}>{questionTone.label}</span>
+                                                          {' · '}
+                                                          {question.passedTests}/{question.totalTests} tests
+                                                          {' · '}
+                                                          {question.awardedPoints}/{question.maxScore} pts
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </details>
+                                              </>
                                             )}
                                             {sub.problemId?.difficulty && (
                                               <span className="stu-sub-difficulty">

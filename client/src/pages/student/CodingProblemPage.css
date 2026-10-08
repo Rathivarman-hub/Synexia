@@ -21,58 +21,44 @@
 
 .coding-pane { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
-/* ─── Timers + prev/next ───────────────────────────────────────────────── */
-
-.coding-timers {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
+.coding-column-resize-handle {
+  position: relative;
+  z-index: 3;
+  width: 8px;
+  margin: 0 -4px;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
 }
 
-.coding-timer {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  font-size: 0.78rem;
-  font-weight: 700;
-  /* WHY tabular figures: the value updates every second, and proportional digits
-     make the label shift sideways on every tick. */
-  font-variant-numeric: tabular-nums;
-  color: var(--primary);
+.coding-column-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: var(--border);
+  transition: background 0.15s ease, width 0.15s ease, left 0.15s ease;
 }
 
-.coding-timer svg { width: 13px; height: 13px; }
-
-.coding-timer--muted {
-  color: var(--text-muted);
-  font-weight: 600;
-  border-style: dashed;
+.coding-column-resize-handle:hover::after,
+.coding-column-resize-handle.is-active::after,
+.coding-column-resize-handle:focus-visible::after {
+  left: 2px;
+  width: 4px;
+  background: var(--secondary);
 }
 
-.coding-assessment-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 10px;
-  flex-wrap: wrap;
+.coding-column-resize-handle:focus-visible {
+  outline: none;
 }
 
-.coding-assessment-progress {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.coding-assessment-submit-note {
-  max-width: 220px;
-  text-align: right;
-}
+/* The only assessment clock sits at the right of the statement header,
+   independent of the currently selected question. */
+.coding-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.coding-title-main { min-width: 0; flex: 1; }
+.coding-assessment-global-controls { flex: 0 0 auto; }
 
 .coding-stepper {
   display: flex;
@@ -709,10 +695,12 @@
 @media (max-width: 1100px) {
   /* WHY stack instead of shrink: two Monaco/textarea panes below ~520px each are
      unreadable, and a horizontally scrolling split is worse than a stack. */
-  .coding-workspace { grid-template-columns: 1fr; height: auto; }
+  .coding-workspace { grid-template-columns: 1fr !important; height: auto; }
+  .coding-column-resize-handle { display: none; }
   .coding-pane--statement { border-right: none; border-bottom: 1px solid var(--border); max-height: none; }
   .coding-pane--editor { min-height: 70dvh; }
   .coding-statement-head { position: static; }
+  .coding-title-row { gap: 12px; }
 
   /* WHY the rail has to be re-declared here: it is a flex child with a fixed
      264px basis, and once the workspace becomes a single column that basis would
@@ -740,6 +728,7 @@
 }
 @media (max-width: 560px) {
   .coding-statement-head, .coding-tab-body { padding-left: 16px; padding-right: 16px; }
+  .coding-title-row { flex-direction: column; }
   .coding-action-buttons { width: 100%; }
   .coding-action-buttons button { flex: 1; justify-content: center; }
   .coding-sub-time { display: none; }

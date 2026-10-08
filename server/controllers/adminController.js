@@ -428,7 +428,7 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
       .limit(safeLimit)
       .lean(),
     AssessmentSubmission.find(assessmentFilter)
-      .select('-answers.code -answers.testResults')
+      .select('-answers.code -answers.codeByLanguage -answers.testResults')
       .sort({ submittedAt: -1 })
       .limit(safeLimit)
       .lean(),
@@ -439,32 +439,66 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
     throw new Error('Student not found');
   }
 
-  const finalAssessmentRows = assessmentSubmissions.map((submission) => ({
-    _id: submission._id,
-    assessmentType: submission.assessmentType,
-    problemId: {
-      title: `Coding assessment`,
-    },
-    questionsPassed: submission.answers.filter((answer) => answer.status === 'accepted').length,
-    questionCount: submission.answers.length,
-    activityType: 'Final assessment',
-    language: new Set(submission.answers.map((answer) => answer.language)).size > 1
-      ? 'Multiple languages'
-      : submission.answers[0]?.language || '—',
-    status: submission.status,
-    passedCases: submission.passedCases,
-    totalCases: submission.totalCases,
-    score: submission.score,
-    maxScore: submission.maxScore,
-    assessmentReason: submission.reason === 'warning-limit' ? 'warning-limit' : 'normal',
-    warningCount: submission.warningCount,
-    warningEvents: submission.warningEvents,
-    executionTime: submission.answers.reduce((sum, answer) => sum + answer.executionTime, 0),
-    submittedAt: submission.submittedAt,
-  }));
+  const finalAssessmentRows = assessmentSubmissions.map((submission) => {
+    const questionResults = submission.answers.map((answer) => {
+      const passedTests = answer.passedTests ?? answer.passedCases ?? 0;
+      const totalTests = answer.totalTests ?? answer.totalCases ?? 0;
+      const accepted = answer.status === 'accepted' && totalTests > 0 && passedTests === totalTests;
+      return {
+        title: answer.title,
+        status: accepted ? 'accepted' : answer.status === 'accepted' ? 'wrong-answer' : answer.status,
+        passedTests,
+        totalTests,
+        awardedPoints: accepted ? answer.maxScore ?? 0 : 0,
+        maxScore: answer.maxScore ?? 0,
+      };
+    });
+    return {
+      _id: submission._id,
+      assessmentType: submission.assessmentType,
+      problemId: {
+        title: `Coding assessment`,
+      },
+      questionsPassed: questionResults.filter((answer) => answer.status === 'accepted').length,
+      questionCount: questionResults.length,
+      questionResults,
+      activityType: 'Final assessment',
+      language: new Set(submission.answers.map((answer) => answer.language)).size > 1
+        ? 'Multiple languages'
+        : submission.answers[0]?.language || '—',
+      status: questionResults.every((answer) => answer.status === 'accepted')
+        ? 'accepted'
+        : questionResults.some((answer) => answer.awardedPoints > 0) ? 'partial' : submission.status,
+      passedCases: questionResults.reduce((sum, answer) => sum + answer.passedTests, 0),
+      totalCases: questionResults.reduce((sum, answer) => sum + answer.totalTests, 0),
+      score: questionResults.reduce((sum, answer) => sum + answer.awardedPoints, 0),
+      maxScore: questionResults.reduce((sum, answer) => sum + answer.maxScore, 0),
+      assessmentReason: submission.reason === 'warning-limit' ? 'warning-limit' : 'normal',
+      warningCount: submission.warningCount,
+      warningEvents: submission.warningEvents,
+      executionTime: submission.answers.reduce((sum, answer) => sum + answer.executionTime, 0),
+      submittedAt: submission.submittedAt,
+    };
+  });
   const submissions = [
-    ...codingSubmissions.map((submission) => ({ ...submission, activityType: 'Coding question' })),
-    ...debuggingSubmissions.map((submission) => ({ ...submission, activityType: 'Coding question' })),
+    ...codingSubmissions.map((submission) => ({
+      ...submission,
+      score: submission.status === 'accepted'
+        && submission.totalCases > 0
+        && submission.passedCases === submission.totalCases
+        ? submission.maxScore
+        : 0,
+      activityType: 'Coding question',
+    })),
+    ...debuggingSubmissions.map((submission) => ({
+      ...submission,
+      score: submission.status === 'accepted'
+        && submission.totalCases > 0
+        && submission.passedCases === submission.totalCases
+        ? submission.maxScore
+        : 0,
+      activityType: 'Coding question',
+    })),
     ...finalAssessmentRows,
   ]
     .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))

@@ -86,7 +86,10 @@ const getPistonClient = () => {
 // in the grader means the grader only ever deals with 5 semantic outcomes.
 const JUDGE0_STATUS_MAP = {
   3: 'ok',
-  4: 'wrong-answer',
+  // Judge0 has no expected_output in our execution requests. Its "Wrong Answer"
+  // can therefore only reflect its own empty/default comparison; grading and
+  // expected-output comparison are performed by SYNEXIA's grader instead.
+  4: 'ok',
   5: 'time-limit-exceeded',
   6: 'compile-error',
   7: 'runtime-error', // SIGSEGV
@@ -128,15 +131,16 @@ const judge0Run = async ({ meta, code, stdin, timeLimitMs }) => {
     }
   }
 
+  return normalizeJudge0Result(data);
+};
+
+export const normalizeJudge0Result = (data) => {
   const statusId = data?.status?.id;
-  const compileOutput = clampOutput(decode(data.compile_output));
-  const stdout = clampOutput(decode(data.stdout));
-  const stderr = clampOutput(decode(data.stderr));
-  const message = clampOutput(decode(data.message));
-
-  let status = JUDGE0_STATUS_MAP[statusId] || 'internal-error';
-  if (!data.status) status = 'internal-error';
-
+  const status = data?.status ? JUDGE0_STATUS_MAP[statusId] || 'internal-error' : 'internal-error';
+  const compileOutput = clampOutput(decode(data?.compile_output));
+  const stdout = clampOutput(decode(data?.stdout));
+  const stderr = clampOutput(decode(data?.stderr));
+  const message = clampOutput(decode(data?.message));
   let error = compileOutput || message || stderr || '';
   if (status === 'time-limit-exceeded' && !error) error = 'Time limit exceeded.';
 
@@ -144,10 +148,9 @@ const judge0Run = async ({ meta, code, stdin, timeLimitMs }) => {
     status,
     output: status === 'ok' ? stdout : '',
     error: error.trim(),
-    exitCode: typeof data.exit_code === 'number' ? data.exit_code : null,
-    // Judge0 reports CPU seconds as a string; the rest of the platform uses ms.
-    executionTime: data.time ? Math.round(Number(data.time) * 1000) : 0,
-    memoryUsageKB: Number.isFinite(Number(data.memory)) ? Math.max(0, Number(data.memory)) : 0,
+    exitCode: typeof data?.exit_code === 'number' ? data.exit_code : null,
+    executionTime: data?.time ? Math.round(Number(data.time) * 1000) : 0,
+    memoryUsageKB: Number.isFinite(Number(data?.memory)) ? Math.max(0, Number(data.memory)) : 0,
   };
 };
 

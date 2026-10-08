@@ -24,6 +24,9 @@ export const submitAssessmentSchema = Joi.object({
     questionId: Joi.string().hex().length(24).required(),
     language: Joi.string().valid(...LANGUAGE_KEYS).required(),
     code: Joi.string().allow('').max(20000).default(''),
+    codeByLanguage: Joi.object(
+      Object.fromEntries(LANGUAGE_KEYS.map((language) => [language, Joi.string().allow('').max(20000)]))
+    ).default({}),
   })).max(8).default([]),
   warningCount: Joi.number().integer().min(0).max(3).default(0),
   warningEvents: Joi.array().items(warningEventSchema).max(3).default([]),

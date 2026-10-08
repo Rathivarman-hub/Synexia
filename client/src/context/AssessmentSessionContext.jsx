@@ -108,7 +108,20 @@ export const AssessmentSessionProvider = ({ children }) => {
           code = '';
         }
       }
-      return { questionId: question._id, language, code: code || '' };
+      const codeByLanguage = {};
+      const prefix = assessmentType === 'debugging' ? DEBUG_DRAFT_PREFIX : DRAFT_PREFIX;
+      for (const languageKey of Object.keys(MONACO_LANGUAGE_BY_KEY)) {
+        try {
+          const draft = localStorage.getItem(`${prefix}${question.slug}:${languageKey}`);
+          if (draft !== null) codeByLanguage[languageKey] = draft;
+        } catch { /* private mode */ }
+      }
+      try {
+        const latestCode = localStorage.getItem(`${prefix}${question.slug}:${language}`);
+        if (latestCode !== null) code = latestCode;
+      } catch { /* private mode */ }
+      codeByLanguage[language] = code || '';
+      return { questionId: question._id, language, code: code || '', codeByLanguage };
     });
 
     let submission;
@@ -138,7 +151,13 @@ export const AssessmentSessionProvider = ({ children }) => {
     setWarningEvents(warningEventsRef.current);
     setAssessmentAnswers(Object.fromEntries((submission.answers || []).map((answer) => [
       String(answer.questionId),
-      { questionId: String(answer.questionId), slug: answer.slug, language: answer.language, code: answer.code },
+      {
+        questionId: String(answer.questionId),
+        slug: answer.slug,
+        language: answer.language,
+        code: answer.code,
+        codeByLanguage: answer.codeByLanguage || {},
+      },
     ])));
     setAssessmentEnded(true);
     setAssessmentStarted(false);
@@ -258,7 +277,13 @@ export const AssessmentSessionProvider = ({ children }) => {
       })));
       setAssessmentAnswers(Object.fromEntries(submission.answers.map((answer) => [
         String(answer.questionId),
-        { questionId: String(answer.questionId), slug: answer.slug, language: answer.language, code: answer.code },
+        {
+          questionId: String(answer.questionId),
+          slug: answer.slug,
+          language: answer.language,
+          code: answer.code,
+          codeByLanguage: answer.codeByLanguage || {},
+        },
       ])));
       setAssessmentLoaded(true);
       return;

@@ -15,7 +15,7 @@ import {
 import { runCodeSchema, submitCodeSchema } from '../validators/codingValidators.js';
 import { submitAssessmentSchema } from '../validators/assessmentValidators.js';
 import {
-  getMyAssessment, recordAssessmentWarning, startAssessment, submitAssessment,
+  getMyAssessment, getMySavedAnswer, recordAssessmentWarning, startAssessment, submitAssessment,
 } from '../controllers/assessmentController.js';
 import { recordAssessmentWarningSchema } from '../validators/assessmentValidators.js';
 
@@ -33,6 +33,7 @@ router.post('/run', protect, codeLimiter, validate(runCodeSchema), runCode);
 router.post('/submit', protect, codeLimiter, validate(submitCodeSchema), submitCode);
 router.post('/assessment/start', protect, startAssessment('coding'));
 router.get('/assessment/me', protect, getMyAssessment('coding'));
+router.get('/problems/:slug/saved-answer', protect, getMySavedAnswer('coding'));
 router.post('/assessment/warning', protect, validate(recordAssessmentWarningSchema), recordAssessmentWarning('coding'));
 router.post('/assessment/submit', protect, codeLimiter, validate(submitAssessmentSchema), submitAssessment('coding'));
 

@@ -3,6 +3,10 @@ import api from '../api/axios';
 
 const AuthContext = createContext();
 
+const avatarStorageKey = (email) => `techiz-avatar:${email.trim().toLowerCase()}`;
+
+const getStoredAvatar = (email) => localStorage.getItem(avatarStorageKey(email)) || '';
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('techiz-user')); } catch { return null; }
@@ -12,17 +16,23 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const storedUser = user;
-    const storedAvatar = localStorage.getItem('techiz-avatar') || '';
     if (!storedUser?.token) {
       setInitializing(false);
       return;
     }
 
+    const legacyAvatar = localStorage.getItem('techiz-avatar') || '';
+    const localAvatar = getStoredAvatar(storedUser.email)
+      || (storedUser.avatar?.startsWith('data:image/') ? storedUser.avatar : '')
+      || (legacyAvatar.startsWith('data:image/') ? legacyAvatar : '');
+    if (localAvatar) localStorage.setItem(avatarStorageKey(storedUser.email), localAvatar);
+    localStorage.removeItem('techiz-avatar');
+
     api.get('/auth/me')
       .then(({ data }) => {
         const refreshedUser = {
           ...data.data,
-          avatar: data.data.avatar || storedUser.avatar || storedAvatar,
+          avatar: localAvatar || data.data.avatar || storedUser.avatar || '',
           token: storedUser.token,
         };
         localStorage.setItem('techiz-user', JSON.stringify(refreshedUser));
@@ -39,10 +49,13 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/login', { email, password });
-      localStorage.setItem('techiz-user', JSON.stringify(data.data));
-      if (data.data.avatar) localStorage.setItem('techiz-avatar', data.data.avatar);
-      setUser(data.data);
-      return data.data;
+      const authenticatedUser = {
+        ...data.data,
+        avatar: getStoredAvatar(data.data.email) || data.data.avatar || '',
+      };
+      localStorage.setItem('techiz-user', JSON.stringify(authenticatedUser));
+      setUser(authenticatedUser);
+      return authenticatedUser;
     } finally { setLoading(false); }
   };
 
@@ -50,23 +63,27 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/register', payload);
-      localStorage.setItem('techiz-user', JSON.stringify(data.data));
-      if (data.data.avatar) localStorage.setItem('techiz-avatar', data.data.avatar);
-      setUser(data.data);
-      return data.data;
+      const authenticatedUser = {
+        ...data.data,
+        avatar: getStoredAvatar(data.data.email) || data.data.avatar || '',
+      };
+      localStorage.setItem('techiz-user', JSON.stringify(authenticatedUser));
+      setUser(authenticatedUser);
+      return authenticatedUser;
     } finally { setLoading(false); }
   };
 
   const logout = () => {
     localStorage.removeItem('techiz-user');
-    localStorage.removeItem('techiz-avatar');
     setUser(null);
   };
 
   const updateUser = (updates) => {
     const updated = { ...user, ...updates, avatar: updates.avatar || user?.avatar || '' };
     localStorage.setItem('techiz-user', JSON.stringify(updated));
-    if (updated.avatar) localStorage.setItem('techiz-avatar', updated.avatar);
+    if (updated.avatar.startsWith('data:image/') && updated.email) {
+      localStorage.setItem(avatarStorageKey(updated.email), updated.avatar);
+    }
     setUser(updated);
   };
 

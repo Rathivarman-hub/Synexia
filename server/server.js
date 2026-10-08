@@ -15,7 +15,12 @@ import { connectRedis, isRedisConnected } from './config/redis.js';
 import logger from './config/logger.js';
 import { seedCodingProblems } from './services/codingProblemSeeder.js';
 import { errorHandler, notFound } from './middleware/error.js';
-import { generalLimiter, authLimiter, adminLimiter } from './middleware/rateLimiter.js';
+import {
+  generalLimiter,
+  authLimiter,
+  adminLimiter,
+  initializeCodeLimiter,
+} from './middleware/rateLimiter.js';
 
 import authRoutes from './routes/auth.js';
 import leaderboardRoutes from './routes/leaderboard.js';
@@ -53,7 +58,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 app.use((req, _res, next) => {
@@ -119,6 +124,7 @@ const startServer = async () => {
   await seedCodingProblems({ preserveExisting: true });
   await seedDebuggingProblems();
   await connectRedis();
+  initializeCodeLimiter();
 
   const server = app.listen(PORT, () =>
     logger.info(`🚀 Synexia server running on port ${PORT} [PID: ${process.pid}]`)

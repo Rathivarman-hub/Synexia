@@ -14,6 +14,8 @@ const STATUS_META = {
   'compile-error': { label: 'Compilation Error', icon: FiAlertTriangle, tone: 'danger' },
   'time-limit-exceeded': { label: 'Time Limit Exceeded', icon: FiAlertTriangle, tone: 'warning' },
   'internal-error': { label: 'Judging Error', icon: FiAlertTriangle, tone: 'muted' },
+  'not-attempted': { label: 'Not Attempted', icon: FiAlertTriangle, tone: 'muted' },
+  'not-evaluated': { label: 'Not Evaluated', icon: FiAlertTriangle, tone: 'warning' },
   ok: { label: 'Executed', icon: FiCheckCircle, tone: 'success' },
 };
 
@@ -106,7 +108,10 @@ const CodeConsole = ({ result, running, error, className = '' }) => {
             <span className="code-console-time">Memory {result.memoryUsageKB} KB</span>
           )}
           {typeof result.passedCases === 'number' && typeof result.failedCases === 'number' && (
-            <span className="code-console-time">{result.passedCases} passed · {result.failedCases} failed</span>
+            <span className="code-console-time">
+              {result.passedCases} passed · {result.failedCases} failed
+              {result.fullAssessment && typeof result.totalTests === 'number' ? ` · ${result.totalTests} assessment tests` : ''}
+            </span>
           )}
         </div>
       </div>

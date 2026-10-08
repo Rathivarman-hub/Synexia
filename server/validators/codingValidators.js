@@ -5,6 +5,7 @@ import { LANGUAGE_KEYS } from '../config/languages.js';
 
 export const runCodeSchema = Joi.object({
   problemId: Joi.string().hex().length(24).required(),
+  assessmentSessionId: Joi.string().hex().length(24),
   language: Joi.string().valid(...LANGUAGE_KEYS).required().messages({
     'any.only': 'Unsupported language',
   }),
@@ -30,6 +31,5 @@ export const submitCodeSchema = Joi.object({
       type: Joi.string().valid('fullscreen-exit', 'visibility-hidden', 'window-blur', 'context-switch', 'developer-tools', 'escape').required(),
       occurredAt: Joi.date().iso().required(),
     })).max(3).default([]),
-    elapsedSeconds: Joi.number().integer().min(0).default(0),
   }).default({}),
 });

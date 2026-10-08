@@ -4,6 +4,7 @@ import { SUBMISSION_STATUSES } from './CodingSubmission.js';
 
 const assessmentAnswerSchema = new mongoose.Schema(
   {
+    problemId: { type: mongoose.Schema.Types.ObjectId },
     questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
     title: { type: String, required: true },
     slug: { type: String, required: true },
@@ -17,7 +18,16 @@ const assessmentAnswerSchema = new mongoose.Schema(
         message: 'Answer code must be a string.',
       },
     },
+    codeByLanguage: {
+      type: Map,
+      of: { type: String, maxlength: 20000 },
+      default: {},
+    },
     status: { type: String, enum: SUBMISSION_STATUSES, required: true },
+    accepted: { type: Boolean, default: false },
+    passedTests: { type: Number, default: 0, min: 0 },
+    totalTests: { type: Number, default: 0, min: 0 },
+    awardedPoints: { type: Number, default: 0, min: 0 },
     passedCases: { type: Number, default: 0, min: 0 },
     failedCases: { type: Number, default: 0, min: 0 },
     totalCases: { type: Number, default: 0, min: 0 },

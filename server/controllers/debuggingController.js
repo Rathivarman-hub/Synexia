@@ -9,6 +9,7 @@ import logger from '../config/logger.js';
 import { lockProblemIfAssessmentFinalized } from '../services/assessmentLockService.js';
 import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
 import { deleteCachePattern } from '../utils/cache.js';
+import { evaluateAssessmentAnswer } from '../services/assessmentEvaluationService.js';
 
 const TIME_LIMIT_MS = Number(process.env.CODE_TIME_LIMIT_MS) || 5000;
 const escapeRegex = (text) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
@@ -85,6 +86,17 @@ export const listDebuggingProblems = asyncHandler(async (req, res) => {
   const ids = problems.map((problem) => problem._id);
   const attempts = ids.length ? await DebuggingSubmission.aggregate([
     { $match: { userId: req.user._id, isRun: false, problemId: { $in: ids } } },
+    {
+      $set: {
+        score: {
+          $cond: [
+            { $and: [{ $eq: ['$status', 'accepted'] }, { $gt: ['$totalCases', 0] }, { $eq: ['$passedCases', '$totalCases'] }] },
+            '$maxScore',
+            0,
+          ],
+        },
+      },
+    },
     {
       $group: {
         _id: '$problemId',
@@ -163,6 +175,17 @@ export const getDebuggingProgress = asyncHandler(async (req, res) => {
   const [submissions, assessmentRows] = await Promise.all([DebuggingSubmission.aggregate([
     { $match: { userId: req.user._id, isRun: false, problemId: { $in: problems.map((problem) => problem._id) } } },
     {
+      $set: {
+        score: {
+          $cond: [
+            { $and: [{ $eq: ['$status', 'accepted'] }, { $gt: ['$totalCases', 0] }, { $eq: ['$passedCases', '$totalCases'] }] },
+            '$maxScore',
+            0,
+          ],
+        },
+      },
+    },
+    {
       $group: {
         _id: '$problemId',
         bestScore: { $max: '$score' },
@@ -175,6 +198,23 @@ export const getDebuggingProgress = asyncHandler(async (req, res) => {
     { $match: { userId: req.user._id, assessmentType: 'debugging', submitted: true } },
     { $unwind: '$answers' },
     { $match: { 'answers.questionId': { $in: problems.map((problem) => problem._id) } } },
+    {
+      $set: {
+        'answers.score': {
+          $cond: [
+            {
+              $and: [
+                { $eq: ['$answers.status', 'accepted'] },
+                { $gt: ['$answers.totalCases', 0] },
+                { $eq: ['$answers.passedCases', '$answers.totalCases'] },
+              ],
+            },
+            '$answers.maxScore',
+            0,
+          ],
+        },
+      },
+    },
     {
       $group: {
         _id: '$answers.questionId',
@@ -212,7 +252,7 @@ export const getDebuggingProgress = asyncHandler(async (req, res) => {
 });
 
 export const runDebuggingCode = asyncHandler(async (req, res) => {
-  const { problemId, language, code } = req.body;
+  const { problemId, language, code, assessmentSessionId } = req.body;
   const assessmentLock = await lockProblemIfAssessmentFinalized({
     userId: req.user._id,
     assessmentType: 'debugging',
@@ -246,7 +286,17 @@ export const runDebuggingCode = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error(`No template is configured for ${language}.`);
   }
-  const result = await runSampleTests(buildGraderProblem(problem), { language, code, timeLimitMs: TIME_LIMIT_MS });
+  const result = assessmentLock.activeSession
+    ? await evaluateAssessmentAnswer({
+      assessmentType: 'debugging',
+      userId: req.user._id,
+      sessionId: assessmentSessionId,
+      problemId,
+      language,
+      code,
+      timeLimitMs: TIME_LIMIT_MS,
+    })
+    : await runSampleTests(buildGraderProblem(problem), { language, code, timeLimitMs: TIME_LIMIT_MS });
   res.json({ success: true, data: { ...result, language, sampleCount: result.cases.length } });
 });
 
@@ -325,7 +375,6 @@ export const submitDebuggingCode = asyncHandler(async (req, res) => {
       assessmentReason: isWarningLimitSubmission ? 'warning-limit' : 'normal',
       warningCount: Math.min(3, Math.max(0, Number(assessment.warningCount) || 0)),
       warningEvents: Array.isArray(assessment.warningEvents) ? assessment.warningEvents.slice(0, 3) : [],
-      elapsedSeconds: Math.max(0, Number(assessment.elapsedSeconds) || 0),
     });
   } catch (error) {
     if (error.code !== 11000) throw error;
@@ -403,7 +452,7 @@ export const createDebuggingProblem = asyncHandler(async (req, res) => {
 export const updateDebuggingProblem = asyncHandler(async (req, res) => {
   const updates = { ...req.body };
   const problem = await DebuggingProblem.findByIdAndUpdate(req.params.id, updates, {
-    new: true,
+    returnDocument: 'after',
     runValidators: true,
     select: '+hiddenTestCases',
   });

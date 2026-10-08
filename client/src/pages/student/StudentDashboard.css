@@ -1,238 +1,223 @@
-/* ============================================
-   STUDENT DASHBOARD — CODING CARDS
-   ============================================ */
-
-/* WHY a scoped prefix on every rule here: StudentDashboard.css is imported
-   directly by the dashboard, so unprefixed names like `.dash-coding-title` are
-   fine, but the card reuses global tokens and must not override anything the
-   assessment CTAs depend on. */
-
-.dash-coding-card {
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
+.student-dashboard {
+  --dash-surface: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  --dash-border: color-mix(in srgb, var(--primary) 16%, var(--border));
+  padding-top: 28px;
+  padding-bottom: 56px;
+  background:
+    radial-gradient(ellipse at 5% 0%, rgba(0, 35, 102, 0.07), transparent 36%),
+    radial-gradient(ellipse at 100% 22%, rgba(209, 0, 122, 0.055), transparent 32%);
 }
 
-.dash-coding-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+.student-dashboard .container-xl { max-width: 1320px; }
+.dash-glass-card {
+  background: var(--dash-surface);
+  border: 1px solid var(--dash-border);
+  box-shadow: 0 12px 34px rgba(0, 20, 60, 0.055);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-.dash-coding-title {
+.dash-welcome {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 4px;
-}
-
-.dash-coding-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin: 0;
-}
-
-/* ─── Progress bar ─────────────────────────────────────────────────────── */
-
-.dash-coding-progress { margin-bottom: 4px; }
-
-.dash-coding-progress-head {
-  display: flex;
-  align-items: baseline;
   justify-content: space-between;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.dash-coding-progress-count {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.dash-coding-progress-total {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-.dash-coding-progress-track {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--border);
+  gap: 28px;
   overflow: hidden;
+  min-height: 230px;
+  padding: clamp(26px, 5vw, 48px);
+  border-radius: 22px;
+  background:
+    linear-gradient(118deg, rgba(0, 35, 102, 0.97), rgba(18, 48, 115, 0.94) 52%, rgba(112, 0, 92, 0.92)),
+    var(--gradient-primary);
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(0, 35, 102, 0.2);
 }
 
-.dash-coding-progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  /* WHY a transition: the bar animates from 0 on mount, which reads as the
-     count "filling up" rather than appearing already settled. */
-  transition: width 0.6s ease;
-  background: var(--gradient-primary);
+.dash-welcome-copy, .dash-welcome-actions { position: relative; z-index: 1; }
+.dash-welcome-copy { max-width: 760px; }
+.dash-welcome .dash-eyebrow { color: rgba(255, 255, 255, 0.74); }
+.dash-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--primary);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  line-height: 1.4;
 }
 
-.dash-coding-progress-pct {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  margin-top: 6px;
-}
-
-/* ─── Stat tiles ───────────────────────────────────────────────────────── */
-
-.dash-coding-stat {
+.dash-welcome h1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  /* WHY hover elevation on a read-only tile: it hints "clickable", which these
-     are not. Instead they use a flat border and a tinted icon background so the
-     affordance stays honest. */
-  background: transparent;
-  height: 100%;
+  margin: 12px 0 8px;
+  color: #fff;
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
 }
 
-.dash-coding-stat-icon {
+.dash-welcome h1 svg { flex: none; font-size: 0.82em; color: #ff70bd; }
+.dash-welcome-details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 24px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.9rem;
+}
+.dash-welcome-details svg { margin-right: 5px; }
+.dash-roll-number { padding-left: 10px; border-left: 1px solid rgba(255, 255, 255, 0.28); }
+
+.dash-status-line {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  /* CurrentColor is inherited from the inline `tone` prop, so the tinted
-     background and the glyph can never drift out of sync. */
-  background: color-mix(in srgb, currentColor 14%, transparent);
-  font-size: 1.15rem;
-}
-
-.dash-coding-stat-body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.dash-coding-stat-value {
-  font-size: 1.3rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  line-height: 1.15;
-}
-
-.dash-coding-stat-label {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-weight: 600;
-}
-
-.dash-coding-stat-hint {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  opacity: 0.8;
-  margin-top: 2px;
-  /* WHY truncate rather than wrap: a long rank hint would otherwise make one tile
-     taller than its row-mate and break the 2x2 grid alignment. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ─── Rank card ────────────────────────────────────────────────────────── */
-
-.dash-coding-rank {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
-.dash-coding-rank-label {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-weight: 600;
-}
-
-.dash-coding-rank-value {
-  font-size: 2.4rem;
-  font-weight: 800;
-  line-height: 1.1;
-  margin: 4px 0 2px;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: var(--primary);
-}
-
-.dash-coding-rank-hint {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.dash-coding-rank-bar {
-  height: 6px;
+  gap: 8px;
+  margin-top: 23px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
-  background: var(--border);
-  overflow: hidden;
-  margin-top: 14px;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 0.82rem;
 }
+.dash-status-line strong { color: #fff; }
+.dash-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #a6b1c6; }
+.dash-status-dot--in-progress { background: #ffc857; box-shadow: 0 0 0 4px rgba(255, 200, 87, 0.15); }
+.dash-status-dot--submitted { background: #50d6a2; box-shadow: 0 0 0 4px rgba(80, 214, 162, 0.15); }
+.dash-status-dot--auto-submitted { background: #ff70bd; box-shadow: 0 0 0 4px rgba(255, 112, 189, 0.15); }
 
-.dash-coding-rank-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--gradient-primary);
-  transition: width 0.6s ease;
-}
-
-/* ─── Empty state ──────────────────────────────────────────────────────── */
-
-.dash-coding-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 8px 0 4px;
-}
-
-.dash-coding-empty p {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 0.92rem;
-  font-weight: 600;
-}
-
-.dash-coding-empty-hint {
-  color: var(--text-muted) !important;
-  font-size: 0.84rem !important;
-  font-weight: 400 !important;
-  margin-bottom: 12px !important;
-}
-
-.dash-coding-empty--compact {
+.dash-welcome-actions { display: flex; flex-direction: column; align-items: stretch; gap: 12px; min-width: 230px; }
+.dash-welcome .dash-primary-action {
+  display: inline-flex;
   justify-content: center;
   align-items: center;
-  text-align: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(105deg, #ec008c, #cb007d);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 750;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(209, 0, 122, 0.24);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.dash-welcome .dash-primary-action:hover { color: #fff; transform: translateY(-2px); box-shadow: 0 14px 28px rgba(209, 0, 122, 0.34); }
+.dash-welcome .dash-primary-action.is-disabled { opacity: 0.7; }
+.dash-quiet-link { color: rgba(255, 255, 255, 0.8); text-align: center; font-size: 0.83rem; text-decoration: none; }
+.dash-quiet-link:hover { color: #fff; text-decoration: underline; }
+.dash-hero-orb { position: absolute; z-index: -1; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 50%; }
+.dash-hero-orb--one { width: 310px; height: 310px; right: 13%; top: -205px; box-shadow: 0 0 0 32px rgba(255, 255, 255, 0.025), 0 0 0 66px rgba(255, 255, 255, 0.02); }
+.dash-hero-orb--two { width: 210px; height: 210px; right: -72px; bottom: -132px; background: rgba(255, 255, 255, 0.035); }
+
+.dash-section { margin-top: 36px; }
+.dash-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.dash-section-heading h2, .dash-panel-heading h2 {
+  margin: 5px 0 0;
+  color: var(--text-primary);
+  font-size: 1.24rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+.dash-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
+.dash-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-height: 108px;
+  padding: 20px;
+  border-radius: 15px;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.dash-stat-card:hover, .dash-question-card:hover { transform: translateY(-3px); box-shadow: 0 16px 36px rgba(0, 20, 60, 0.1); }
+.dash-stat-icon, .dash-panel-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: rgba(0, 35, 102, 0.09);
+  color: var(--primary);
+  font-size: 1.2rem;
+}
+.dash-stat-card--2 .dash-stat-icon, .dash-panel-icon--pink { background: rgba(209, 0, 122, 0.1); color: #c60078; }
+.dash-stat-card--3 .dash-stat-icon { background: rgba(0, 150, 136, 0.1); color: #008f82; }
+.dash-stat-card--4 .dash-stat-icon { background: rgba(235, 156, 0, 0.12); color: #bd7900; }
+.dash-stat-card p { margin: 0 0 4px; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; }
+.dash-stat-card strong { color: var(--text-primary); font-size: 1.22rem; font-weight: 800; }
+
+.dash-main-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(290px, 0.9fr); gap: 18px; margin-top: 20px; }
+.dash-panel { min-width: 0; padding: 24px; border-radius: 17px; }
+.dash-panel-heading { display: flex; align-items: center; gap: 13px; }
+.dash-panel-icon { width: 42px; height: 42px; }
+.dash-panel-heading h2 { font-size: 1.08rem; }
+.dash-guidelines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 23px 0 0; padding: 0; list-style: none; }
+.dash-guidelines li { display: flex; align-items: flex-start; gap: 9px; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.45; }
+.dash-guidelines li svg { flex: none; margin-top: 1px; color: #009e79; }
+.dash-flow { display: flex; flex-direction: column; gap: 0; margin: 22px 0 0; padding: 0; list-style: none; }
+.dash-flow li { position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; color: var(--text-secondary); font-size: 0.8rem; font-weight: 650; }
+.dash-flow li:not(:last-child)::after { position: absolute; content: ''; top: 40px; left: 17px; width: 2px; height: 14px; background: linear-gradient(var(--primary), var(--dash-border)); }
+.dash-flow-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border: 1px solid var(--dash-border); border-radius: 11px; background: var(--bg-secondary); color: var(--primary); font-size: 1rem; }
+.dash-flow li.is-complete .dash-flow-icon { background: rgba(0, 158, 121, 0.1); color: #008d6e; }
+
+.dash-questions-section { margin-top: 36px; }
+.dash-section-link { display: inline-flex; align-items: center; gap: 7px; color: var(--primary); font-size: 0.83rem; font-weight: 700; text-decoration: none; }
+.dash-section-link:hover { color: #c60078; }
+.dash-question-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dash-question-card { display: flex; align-items: center; gap: 14px; min-height: 84px; padding: 15px 17px; border-radius: 14px; transition: transform 160ms ease, box-shadow 160ms ease; }
+.dash-question-number { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: rgba(0, 35, 102, 0.08); color: var(--primary); font-size: 0.83rem; font-weight: 800; }
+.dash-question-copy { min-width: 0; }
+.dash-question-copy h3 { overflow: hidden; margin: 0 0 7px; color: var(--text-primary); font-size: 0.88rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.dash-question-meta { display: flex; align-items: center; gap: 9px; color: var(--text-muted); font-size: 0.73rem; }
+.dash-difficulty { padding: 3px 8px; border-radius: 999px; background: rgba(0, 158, 121, 0.1); color: #008d6e; font-weight: 750; }
+.dash-difficulty--medium, .dash-difficulty--easy-medium { background: rgba(235, 156, 0, 0.12); color: #a76a00; }
+.dash-difficulty--hard, .dash-difficulty--medium-hard, .dash-difficulty--complex { background: rgba(209, 0, 122, 0.1); color: #bd006e; }
+.dash-loading { display: flex; justify-content: center; padding: 34px; }
+.dash-inline-error { margin: 14px 0 0; color: var(--danger); font-size: 0.85rem; }
+
+.dash-bottom-grid { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 20px; }
+.dash-language-chips { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 21px; }
+.dash-language-chips span { padding: 8px 13px; border: 1px solid var(--dash-border); border-radius: 999px; background: var(--bg-secondary); color: var(--text-secondary); font-size: 0.79rem; font-weight: 700; }
+
+@media (max-width: 992px) {
+  .dash-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-main-grid, .dash-bottom-grid { grid-template-columns: 1fr; }
 }
 
-/* ─── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .student-dashboard { padding-top: 16px; padding-bottom: 32px; }
+  .dash-welcome { align-items: flex-start; flex-direction: column; min-height: auto; gap: 22px; padding: 26px 21px; border-radius: 17px; }
+  .dash-welcome-actions { width: 100%; min-width: 0; }
+  .dash-welcome h1 { align-items: flex-start; font-size: 1.65rem; }
+  .dash-status-line { margin-top: 17px; font-size: 0.75rem; }
+  .dash-section { margin-top: 28px; }
+  .dash-stat-grid { gap: 10px; }
+  .dash-stat-card { min-height: 96px; gap: 10px; padding: 14px 12px; }
+  .dash-stat-icon { width: 37px; height: 37px; border-radius: 11px; font-size: 1rem; }
+  .dash-stat-card p { font-size: 0.67rem; }
+  .dash-stat-card strong { font-size: 1rem; }
+  .dash-main-grid, .dash-bottom-grid { gap: 12px; margin-top: 14px; }
+  .dash-panel { padding: 19px 16px; }
+  .dash-guidelines { grid-template-columns: 1fr; gap: 10px; }
+  .dash-question-grid { grid-template-columns: 1fr; }
+  .dash-section-heading { align-items: flex-start; flex-direction: column; }
+}
 
-@media (max-width: 768px) {
-  .dash-coding-card { padding: 20px; }
-  /* WHY stack the 2x2 tiles to one column: below sm the two tiles would each be
-     ~120px wide, and the value + label stop fitting on one line. */
-  .dash-coding-card .col-6 { flex: 0 0 100%; max-width: 100%; }
+@media (prefers-reduced-motion: reduce) {
+  .dash-stat-card, .dash-question-card, .dash-welcome .dash-primary-action { transition: none; }
 }

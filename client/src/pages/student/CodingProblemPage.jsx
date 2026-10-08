@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../api/axios';
@@ -10,24 +10,13 @@ import ProblemNavigator from '../../components/ProblemNavigator';
 import AssessmentFinishControl from '../../components/AssessmentFinishControl';
 import InlineSpinner from '../../components/InlineSpinner';
 import { useAssessmentSession } from '../../context/AssessmentSessionContext';
-import { useElapsedTimer, useProblemTimeTracker, formatElapsed } from '../../hooks/useElapsedTimer';
 import {
-  FiChevronLeft, FiPlay, FiUploadCloud, FiRotateCcw, FiCopy, FiCheck, FiX,
-  FiAlertTriangle, FiCode, FiList, FiHelpCircle, FiInbox, FiClock, FiAlertCircle,
+  FiChevronLeft, FiPlay, FiRotateCcw, FiCopy, FiCheck,
+  FiAlertTriangle, FiCode, FiList, FiHelpCircle, FiInbox, FiAlertCircle,
 } from 'react-icons/fi';
 import './CodingProblemPage.css';
 
 const DRAFT_PREFIX = 'syn-coding-draft:v2:';
-const VERDICT = {
-  accepted: { tone: 'success', icon: FiCheck },
-  'wrong-answer': { tone: 'danger', icon: FiX },
-  partial: { tone: 'warning', icon: FiAlertTriangle },
-  'compile-error': { tone: 'danger', icon: FiAlertTriangle },
-  'runtime-error': { tone: 'danger', icon: FiAlertTriangle },
-  'time-limit-exceeded': { tone: 'warning', icon: FiAlertTriangle },
-  'internal-error': { tone: 'muted', icon: FiAlertCircle },
-  ok: { tone: 'success', icon: FiCheck },
-};
 const MIN_EDITOR_HEIGHT = 250;
 const MIN_CONSOLE_HEIGHT = 120;
 const MAX_CONSOLE_RATIO = 0.6;
@@ -43,8 +32,8 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const {
-    assessmentQuestions,
     assessmentAnswers,
+    assessmentSessionId,
     isAssessmentActive,
     isAssessmentSubmitted,
     assessmentSubmitting,
@@ -52,12 +41,11 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   } = useAssessmentSession();
 
   const [problem, setProblem] = useState(null);
+  const [serverSavedAnswer, setServerSavedAnswer] = useState(null);
   const [language, setLanguage] = useState(() => {
     try { return localStorage.getItem(`syn-assessment-language:v1:${slug}`) || 'python'; } catch { return 'python'; }
   });
-  // codeByLanguage keeps every language's draft alive across switches. A single
-  // `code` string would silently discard the C++ solution the moment a student
-  // peeked at the Python starter.
+  // Preserve each language's student draft while switching editor templates.
   const [codeByLanguage, setCodeByLanguage] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -68,16 +56,26 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const [navCollapsed, setNavCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 1200
   );
+  const [editorShare, setEditorShare] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem('syn-coding-editor-share:v1'));
+      return Number.isFinite(saved) && saved >= 30 && saved <= 70 ? saved : 50;
+    } catch {
+      return 50;
+    }
+  });
+  const [isHorizontalResizing, setIsHorizontalResizing] = useState(false);
   const [consoleHeight, setConsoleHeight] = useState(180);
   const [isResizing, setIsResizing] = useState(false);
+  const workspaceRef = useRef(null);
+  const statementPaneRef = useRef(null);
   const editorPaneRef = useRef(null);
   const editorRef = useRef(null);
   const resizeStartRef = useRef(null);
+  const horizontalResizeRef = useRef(false);
 
   const [runResult, setRunResult] = useState(null);
-  const [submitResult, setSubmitResult] = useState(null);
   const [running, setRunning] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [consoleError, setConsoleError] = useState('');
 
   const [execution, setExecution] = useState(null);
@@ -85,26 +83,6 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const submissionLocked = isAssessmentSubmitted || assessmentSubmitting || (problemLocked && !isAssessmentActive);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [guardDialog, setGuardDialog] = useState(null);
-
-  // ─── Timers ────────────────────────────────────────────────────────────────
-  // Session timer: total time in the workspace. Problem timer: per-problem time,
-  // which is what the rail displays and what a submission reports.
-  const { elapsedMs: sessionMs } = useElapsedTimer({ running: true });
-  const { timeSpentByProblem, liveSeconds } = useProblemTimeTracker(slug);
-
-  // WHY a ticking clock value held in state rather than reading performance.now()
-  // during render: the navigator also displays the live segment for the problem
-  // being worked on, and a render-only read would freeze it at whatever value the
-  // last unrelated re-render happened to see. One shared tick keeps the header
-  // timer and the rail in lockstep, and it uses the same time base as
-  // useProblemTimeTracker (both are performance.now()) so the two never disagree.
-  const [now, setNow] = useState(() => performance.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(performance.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const problemSeconds = problem ? liveSeconds(problem._id, now) : 0;
 
   const handleResizePointerMove = useCallback((event) => {
     const start = resizeStartRef.current;
@@ -131,6 +109,32 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     setIsResizing(true);
   }, [consoleHeight]);
 
+  const handleHorizontalResize = useCallback((event) => {
+    if (!horizontalResizeRef.current) return;
+    const workspace = workspaceRef.current;
+    const statement = statementPaneRef.current;
+    if (!workspace || !statement) return;
+    const workspaceRight = workspace.getBoundingClientRect().right;
+    const contentWidth = workspaceRight - statement.getBoundingClientRect().left;
+    if (contentWidth <= 0) return;
+    const share = ((workspaceRight - event.clientX) / contentWidth) * 100;
+    const nextShare = Math.min(70, Math.max(30, share));
+    setEditorShare(nextShare);
+    try { localStorage.setItem('syn-coding-editor-share:v1', String(nextShare)); } catch { /* private mode */ }
+  }, []);
+
+  const stopHorizontalResize = useCallback(() => {
+    horizontalResizeRef.current = false;
+    setIsHorizontalResizing(false);
+  }, []);
+
+  const startHorizontalResize = useCallback((event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    horizontalResizeRef.current = true;
+    setIsHorizontalResizing(true);
+  }, []);
+
   useEffect(() => {
     if (!isResizing) return undefined;
     window.addEventListener('pointermove', handleResizePointerMove);
@@ -144,13 +148,28 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   }, [isResizing, handleResizePointerMove, stopResize]);
 
   useEffect(() => {
+    if (!isHorizontalResizing) return undefined;
+    window.addEventListener('pointermove', handleHorizontalResize);
+    window.addEventListener('pointerup', stopHorizontalResize);
+    window.addEventListener('pointercancel', stopHorizontalResize);
+    return () => {
+      window.removeEventListener('pointermove', handleHorizontalResize);
+      window.removeEventListener('pointerup', stopHorizontalResize);
+      window.removeEventListener('pointercancel', stopHorizontalResize);
+    };
+  }, [isHorizontalResizing, handleHorizontalResize, stopHorizontalResize]);
+
+  useEffect(() => {
+    editorRef.current?.layout();
+  }, [editorShare]);
+
+  useEffect(() => {
     editorRef.current?.layout();
   }, [consoleHeight]);
 
   // WHY a ref for "is this the newest run": a student can hit Run twice quickly,
-  // and the slower response must not overwrite the newer verdict.
+  // and the slower response must not overwrite the newer result.
   const runSeq = useRef(0);
-  const submitSeq = useRef(0);
 
   const readDraftForLanguage = useCallback((languageKey, template) => {
     let saved = '';
@@ -158,19 +177,36 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     return saved && !isStarterCode(saved, template) ? saved : template;
   }, [slug, isDebugging]);
 
-  const code = codeByLanguage[language] ?? '';
-  const originalStarterCode = problem?.starterCode?.[language] ?? '';
+  const originalStarterCode = problem?.starterCodeTemplates?.[language] || problem?.starterCode?.[language] || '';
+  const savedAssessmentAnswer = isAssessmentSubmitted && problem
+    ? assessmentAnswers[String(problem._id)]
+    : null;
+  const savedReviewAnswer = savedAssessmentAnswer || serverSavedAnswer;
+  const submittedCodeByLanguage = savedReviewAnswer?.codeByLanguage || {};
+  const code = savedReviewAnswer?.language === language
+    ? savedReviewAnswer.code
+    : submittedCodeByLanguage[language] ?? codeByLanguage[language] ?? '';
+  const hasUnsubmittedLanguageDraft = Boolean(
+    savedReviewAnswer
+    && savedReviewAnswer.language !== language
+    && (submittedCodeByLanguage[language] || codeByLanguage[language])
+    && !isStarterCode(code, originalStarterCode)
+  );
   const starterUnmodified = isStarterCode(code, originalStarterCode);
   const changedCodeLength = getChangedCodeLength(code, originalStarterCode);
   const setCode = useCallback((next) => {
     setCodeByLanguage((prev) => ({ ...prev, [language]: next }));
-  }, [language]);
+    try {
+      localStorage.setItem(draftKey(slug, language, isDebugging), next);
+    } catch { /* quota / private mode */ }
+  }, [language, slug, isDebugging]);
 
   useEffect(() => {
-    if (!problem || !problem.starterCode?.[language]) return;
+    const template = problem?.starterCodeTemplates?.[language] || problem?.starterCode?.[language];
+    if (!problem || !template) return;
     setCodeByLanguage((prev) => {
       if (prev[language] !== undefined) return prev;
-      return { ...prev, [language]: readDraftForLanguage(language, problem.starterCode[language]) };
+      return { ...prev, [language]: readDraftForLanguage(language, template) };
     });
   }, [problem, language, readDraftForLanguage]);
 
@@ -178,15 +214,13 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   useEffect(() => {
     let cancelled = false;
     runSeq.current += 1;
-    submitSeq.current += 1;
     setLoading(true);
     setLoadError('');
     setProblem(null);
+    setServerSavedAnswer(null);
     setCodeByLanguage({});
     setRunResult(null);
-    setSubmitResult(null);
     setRunning(false);
-    setSubmitting(false);
     setConsoleError('');
 
     api.get(
@@ -210,10 +244,9 @@ const CodingProblemPage = ({ isDebugging = false }) => {
         // Replace an unchanged generic-template draft from older sessions with
         // the problem-specific starter code; keep any student-edited draft.
         const restored = {};
-        const starters = loaded.starterCode || {};
-        const templates = loaded.starterCodeTemplates || {};
+        const templates = loaded.starterCodeTemplates || loaded.starterCode || {};
         (isDebugging ? [{ key: 'python' }] : loaded.languages || []).forEach((l) => {
-          const template = templates[l.key] || starters[l.key] || '';
+          const template = templates[l.key] || '';
           restored[l.key] = readDraftForLanguage(l.key, template);
         });
         setCodeByLanguage(restored);
@@ -230,6 +263,27 @@ const CodingProblemPage = ({ isDebugging = false }) => {
 
     return () => { cancelled = true; };
   }, [slug, isDebugging]);
+
+  useEffect(() => {
+    if ((!isAssessmentSubmitted && (isAssessmentActive || !problemLocked)) || !problem || problem.slug !== slug) {
+      setServerSavedAnswer(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    api.get(`/${isDebugging ? 'debugging' : 'coding'}/problems/${slug}/saved-answer`)
+      .then(({ data }) => {
+        if (!cancelled) setServerSavedAnswer(data.data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toast.error(err.response?.data?.message || 'Could not load the saved answer for review.');
+          setServerSavedAnswer(null);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [isAssessmentSubmitted, isAssessmentActive, problemLocked, problem, slug, isDebugging]);
 
   // ─── Persist drafts ─────────────────────────────────────────────────────────
   // WHY debounced: writing localStorage on every keystroke is a synchronous
@@ -249,16 +303,19 @@ const CodingProblemPage = ({ isDebugging = false }) => {
 
   useEffect(() => {
     if (!isAssessmentSubmitted || !problem || problem.slug !== slug) return;
-    const answer = assessmentAnswers[String(problem._id)];
+    const answer = savedReviewAnswer || assessmentAnswers[String(problem._id)];
     if (!answer) return;
     setLanguage(answer.language);
-    setCodeByLanguage({ [answer.language]: answer.code });
+    setCodeByLanguage((current) => ({
+      ...current,
+      ...(answer.codeByLanguage || {}),
+      [answer.language]: answer.code,
+    }));
   }, [isAssessmentSubmitted, assessmentAnswers, problem, slug]);
 
   // ─── Sandbox health ─────────────────────────────────────────────────────────
-  // Checked once per problem view. If the sandbox is unconfigured the Run and
-  // Submit buttons are disabled with an explanation, instead of letting the
-  // student type a full solution and only then hit a 503.
+  // Checked once per problem view so Run can explain an unavailable sandbox
+  // before the student starts writing code.
   useEffect(() => {
     let cancelled = false;
     api.get('/coding/execution-status')
@@ -272,9 +329,19 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const sandboxDown = execution !== null && execution.configured === false;
 
   const selectLanguage = async (nextLanguage) => {
-    if (submissionLocked) return;
+    if (assessmentSubmitting) return;
     setShowLanguageMenu(false);
-    if (isDebugging) {
+    if (isAssessmentSubmitted) {
+      const answer = assessmentAnswers[String(problem._id)];
+      const savedCode = answer?.language === nextLanguage
+        ? answer.code
+        : answer?.codeByLanguage?.[nextLanguage]
+          || readDraftForLanguage(
+            nextLanguage,
+            problem.starterCodeTemplates?.[nextLanguage] || problem.starterCode?.[nextLanguage] || ''
+          );
+      setCodeByLanguage((current) => ({ ...current, [nextLanguage]: savedCode }));
+    } else if (isDebugging) {
       try {
         const { data } = await api.get(`/debugging/problems/${slug}`, { params: { language: nextLanguage } });
         const template = data.data.languageTemplates?.[nextLanguage];
@@ -292,15 +359,16 @@ const CodingProblemPage = ({ isDebugging = false }) => {
       }
     } else {
       setCodeByLanguage((current) => {
-        const template = problem?.starterCode?.[nextLanguage] || '';
-        if (current[nextLanguage] !== undefined) return current;
+          const template = problem?.starterCodeTemplates?.[nextLanguage]
+            || problem?.starterCode?.[nextLanguage]
+            || '';
+          if (current[nextLanguage] !== undefined) return current;
         return { ...current, [nextLanguage]: readDraftForLanguage(nextLanguage, template) };
       });
     }
     setLanguage(nextLanguage);
     try { localStorage.setItem(`syn-assessment-language:v1:${slug}`, nextLanguage); } catch { /* private mode */ }
     setRunResult(null);
-    setSubmitResult(null);
   };
 
   const handleApiError = useCallback((err, fallback) => {
@@ -326,9 +394,13 @@ const CodingProblemPage = ({ isDebugging = false }) => {
 
     setRunning(true);
     setConsoleError('');
-    setSubmitResult(null);
     try {
-      const { data } = await api.post(isDebugging ? '/debugging/run' : '/coding/run', { problemId: problem._id, language, code });
+      const { data } = await api.post(isDebugging ? '/debugging/run' : '/coding/run', {
+        problemId: problem._id,
+        language,
+        code,
+        ...(isAssessmentActive ? { assessmentSessionId } : {}),
+      });
       if (runSeq.current !== seq) return; // a newer run superseded this one
       setRunResult(data.data);
     } catch (err) {
@@ -337,69 +409,17 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     } finally {
       if (runSeq.current === seq) setRunning(false);
     }
-  }, [problem, running, submissionLocked, code, language, handleApiError, isDebugging]);
+  }, [problem, running, submissionLocked, code, language, handleApiError, isDebugging, isAssessmentActive, assessmentSessionId]);
 
-  // ─── Submit: samples + hidden cases, scored and ranked ─────────────────────
-  const executeSubmit = useCallback(async ({ assessment: assessmentMeta = {}, codeOverride } = {}) => {
-    if (!problem || submitting || submissionLocked || isAssessmentActive) return;
-    const submissionCode = codeOverride ?? code;
-    if (!submissionCode.trim()) {
-      toast.error('Write some code before submitting.');
-      return;
-    }
-
-    const seq = submitSeq.current + 1;
-    submitSeq.current = seq;
-    setSubmitting(true);
-    setConsoleError('');
-    setRunResult(null);
-    try {
-      const { data } = await api.post(isDebugging ? '/debugging/submit' : '/coding/submit', {
-        problemId: problem._id,
-        language,
-        code: submissionCode,
-        assessment: assessmentMeta,
-      });
-      if (submitSeq.current !== seq) return;
-      setSubmitResult(data.data);
-      // WHY re-fetch: the server just changed this problem's acceptance rate and
-      // the student's Status pill. Keeping the stale copy would leave the page
-      // claiming "Not attempted" on a problem they just solved.
-      try {
-        const { data: fresh } = await api.get(
-          isDebugging ? `/debugging/problems/${slug}` : `/coding/problems/${slug}`,
-          isDebugging ? { params: { language } } : undefined
-        );
-        if (submitSeq.current !== seq) return;
-        const loaded = isDebugging
-          ? {
-            ...fresh.data,
-            statement: fresh.data.description,
-            testCases: fresh.data.visibleTestCases || [],
-            starterCode: fresh.data.languageTemplates || {},
-            starterCodeTemplates: fresh.data.languageTemplates || {},
-          }
-          : fresh.data;
-        setProblem(loaded);
-        setProblemLocked((loaded.totalAttempts || 0) > 0);
-      } catch { /* non-fatal: the verdict is already on screen */ }
-    } catch (err) {
-      if (submitSeq.current !== seq) return;
-      handleApiError(err, 'Submission failed.');
-    } finally {
-      if (submitSeq.current === seq) setSubmitting(false);
-    }
-  }, [problem, submitting, submissionLocked, isAssessmentActive, code, language, slug, handleApiError, isDebugging]);
-
-  const guardAction = useCallback((action) => {
+  const guardAction = useCallback(() => {
     if (starterUnmodified) {
-      setGuardDialog({ kind: 'starter', action });
-      toast.info('Modify the starter code before running or submitting.');
+      setGuardDialog({ kind: 'starter' });
+      toast.info('Modify the starter code before running.');
       return true;
     }
     if (changedCodeLength < MIN_SOLUTION_CHANGE) {
-      setGuardDialog({ kind: 'short', action });
-      toast.warning('Your solution appears incomplete.');
+      setGuardDialog({ kind: 'short' });
+      toast.warning('Your code appears incomplete.');
       return true;
     }
     return false;
@@ -411,27 +431,15 @@ const CodingProblemPage = ({ isDebugging = false }) => {
       toast.error('Write some code before running.');
       return;
     }
-    if (!isAssessmentActive && guardAction('run')) return;
+    if (!isAssessmentActive && guardAction()) return;
     void executeRun();
   }, [problem, running, submissionLocked, code, isAssessmentActive, guardAction, executeRun]);
 
-  const handleSubmit = useCallback(() => {
-    if (!problem || submitting || submissionLocked || isAssessmentActive || isAssessmentSubmitted) return;
-    if (!code.trim()) {
-      toast.error('Write some code before submitting.');
-      return;
-    }
-    if (guardAction('submit')) return;
-    void executeSubmit();
-  }, [problem, submitting, submissionLocked, isAssessmentActive, isAssessmentSubmitted, code, guardAction, executeSubmit]);
-
   const continueAfterWarning = useCallback(() => {
-    const pendingAction = guardDialog?.action;
     setGuardDialog(null);
     if (guardDialog?.kind !== 'short') return;
-    if (pendingAction === 'run') void executeRun();
-    if (pendingAction === 'submit') void executeSubmit();
-  }, [guardDialog, executeRun, executeSubmit]);
+    void executeRun();
+  }, [guardDialog, executeRun]);
 
   useEffect(() => {
     if (!guardDialog) return undefined;
@@ -441,22 +449,6 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [guardDialog]);
-
-  // ─── Keyboard shortcuts (also bound to F9 / F12 inside Monaco) ─────────────
-  useEffect(() => {
-    const onKey = (e) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      if (e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [handleSubmit]);
-
-  const verdict = useMemo(() => {
-    if (!submitResult) return null;
-    const meta = VERDICT[submitResult.status] || VERDICT.internalError;
-    return { ...meta, ...submitResult };
-  }, [submitResult]);
 
   // Ordered catalogue of every published problem, lifted up from the navigator.
   // WHY the rail owns it: the rail already loads the ordered list, and duplicating
@@ -523,57 +515,45 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   }
 
   return (
-    <div className="coding-workspace">
+    <div
+      ref={workspaceRef}
+      className="coding-workspace"
+      style={{ gridTemplateColumns: `auto minmax(0, ${100 - editorShare}fr) 8px minmax(0, ${editorShare}fr)` }}
+    >
       {/* ─── Far left: question navigator ─── */}
       <ProblemNavigator
         collapsed={navCollapsed}
         onToggle={() => setNavCollapsed((v) => !v)}
-        assessmentQuestions={assessmentQuestions}
-        timeSpentByProblem={timeSpentByProblem}
-        liveSeconds={liveSeconds}
-        now={now}
         onCatalogLoaded={setCatalog}
         isDebugging={isDebugging}
       />
 
       {/* ─── Centre: problem statement ─── */}
-      <section className="coding-pane coding-pane--statement" aria-label="Problem statement">
+      <section ref={statementPaneRef} className="coding-pane coding-pane--statement" aria-label="Problem statement">
         <div className="coding-statement-head">
           <Link to={isDebugging ? '/debugging/problems' : '/coding/problems'} className="coding-back">
             <FiChevronLeft /> All problems
           </Link>
-          <h1 className="coding-title">{problem.title}</h1>
-          <div className="coding-meta-row">
-            <DifficultyBadge difficulty={problem.difficulty} />
-            <span className="coding-points-pill">{problem.points} pts</span>
-            {!isDebugging && problem.hiddenCount > 0 && (
-              <span className="coding-meta-note">{problem.hiddenCount} hidden test{problem.hiddenCount === 1 ? '' : 's'}</span>
-            )}
-            {problem.totalSubmissions > 0 && (
-              <span className="coding-meta-note">{problem.acceptanceRate}% acceptance</span>
-            )}
-          </div>
-
-          {/* Timer: elapsed on this problem, and elapsed in the session.
-              WHY show both: "how long have I been on this" and "how long have I
-              been working" answer different questions, and a single number
-              cannot distinguish a stuck problem from a long session. */}
-          <div className="coding-timers">
-            <span className="coding-timer" title="Time on this problem">
-              <FiClock /> {formatElapsed(problemSeconds * 1000)}
-            </span>
-            <span className="coding-timer coding-timer--muted" title="Total time in this session">
-              session {formatElapsed(sessionMs)}
-            </span>
-          </div>
-          {isAssessmentActive && (
-            <div className="coding-assessment-controls">
-              <span className="coding-assessment-progress">
-                Question {Math.max(1, assessmentQuestions.findIndex((question) => question.slug === slug) + 1)} of {assessmentQuestions.length}
-              </span>
-              <AssessmentFinishControl />
+          <div className="coding-title-row">
+            <div className="coding-title-main">
+              <h1 className="coding-title">{problem.title}</h1>
+              <div className="coding-meta-row">
+                <DifficultyBadge difficulty={problem.difficulty} />
+                <span className="coding-points-pill">{problem.points} pts</span>
+                {!isDebugging && problem.hiddenCount > 0 && (
+                  <span className="coding-meta-note">{problem.hiddenCount} hidden test{problem.hiddenCount === 1 ? '' : 's'}</span>
+                )}
+                {problem.totalSubmissions > 0 && (
+                  <span className="coding-meta-note">{problem.acceptanceRate}% acceptance</span>
+                )}
+              </div>
             </div>
-          )}
+            {isAssessmentActive && (
+              <div className="coding-assessment-global-controls">
+                <AssessmentFinishControl />
+              </div>
+            )}
+          </div>
 
           <div className="coding-stepper">
             {/* WHY disabled rather than hidden: the student needs to see that a
@@ -604,10 +584,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
           {[
             { key: 'description', label: 'Description', icon: FiList },
             { key: 'examples', label: 'Examples', icon: FiInbox },
-            ...(!isDebugging ? [
-              { key: 'submissions', label: 'Submissions', icon: FiClock },
-              { key: 'hints', label: 'Hints', icon: FiHelpCircle },
-            ] : []),
+            ...(!isDebugging ? [{ key: 'hints', label: 'Hints', icon: FiHelpCircle }] : []),
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -658,8 +635,9 @@ const CodingProblemPage = ({ isDebugging = false }) => {
             <>
               <h3 className="coding-h3">Sample test cases</h3>
               <p className="coding-muted">
-                These are the cases <strong>Run</strong> executes. Submitting also runs
-                {problem.hiddenCount} hidden case{problem.hiddenCount === 1 ? '' : 's'}.
+                {isAssessmentActive
+                  ? <><strong>Run Code</strong> evaluates every required assessment test, including hidden cases.</>
+                  : <>These are the cases <strong>Run Code</strong> executes. A final assessment submission does not run code again.</>}
               </p>
               {problem.testCases?.length > 0 ? problem.testCases.map((tc, i) => (
                 <div key={i} className="coding-example">
@@ -672,8 +650,6 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               )) : <p className="coding-muted">This problem has no public examples.</p>}
             </>
           )}
-
-          {!isDebugging && activeTab === 'submissions' && <SubmissionsTab problemId={problem._id} onReload={handleSubmit} />}
 
           {!isDebugging && activeTab === 'hints' && (
             <>
@@ -690,6 +666,28 @@ const CodingProblemPage = ({ isDebugging = false }) => {
         </div>
       </section>
 
+      <div
+        className={`coding-column-resize-handle${isHorizontalResizing ? ' is-active' : ''}`}
+        role="separator"
+        aria-label="Resize problem description and code editor"
+        aria-orientation="vertical"
+        aria-valuemin={30}
+        aria-valuemax={70}
+        aria-valuenow={Math.round(editorShare)}
+        tabIndex={0}
+        onPointerDown={startHorizontalResize}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const direction = event.key === 'ArrowLeft' ? -2 : 2;
+          setEditorShare((current) => {
+            const nextShare = Math.min(70, Math.max(30, current + direction));
+            try { localStorage.setItem('syn-coding-editor-share:v1', String(nextShare)); } catch { /* private mode */ }
+            return nextShare;
+          });
+        }}
+      />
+
       {/* ─── Right: editor ─── */}
       <section ref={editorPaneRef} className="coding-pane coding-pane--editor" aria-label="Code editor">
         <div className="coding-editor-head">
@@ -698,7 +696,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               type="button"
               className="coding-lang-btn"
               onClick={() => setShowLanguageMenu((v) => !v)}
-              disabled={submissionLocked}
+              disabled={assessmentSubmitting}
               aria-haspopup="listbox"
               aria-expanded={showLanguageMenu}
             >
@@ -714,7 +712,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
                       aria-selected={l.key === language}
                       className={l.key === language ? 'is-active' : ''}
                       onClick={() => { void selectLanguage(l.key); }}
-                      disabled={submissionLocked}
+                      disabled={assessmentSubmitting}
                     >
                       {l.label}
                       {l.key === language && <FiCheck />}
@@ -726,6 +724,15 @@ const CodingProblemPage = ({ isDebugging = false }) => {
           </div>
 
           <div className="coding-editor-tools">
+            {isAssessmentSubmitted && (
+              <span className="coding-muted" role="status">
+                {savedReviewAnswer?.language === language
+                  ? 'Submitted answer'
+                  : hasUnsubmittedLanguageDraft
+                    ? 'Saved code (not submitted)'
+                    : `No saved ${currentLanguageLabel} code`}
+              </span>
+            )}
             <span className={`coding-starter-badge${starterUnmodified ? '' : ' is-modified'}`} role="status">
               <span className="coding-starter-dot" aria-hidden="true" />
               <span>Starter Code:</span>
@@ -737,11 +744,10 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               disabled={submissionLocked}
               title="Reset to the starter code"
               onClick={() => {
-                const starter = problem.starterCode?.[language] || '';
+                const starter = problem.starterCodeTemplates?.[language] || problem.starterCode?.[language] || '';
                 setCode(starter);
                 try { localStorage.removeItem(draftKey(slug, language, isDebugging)); } catch { /* ignore */ }
                 setRunResult(null);
-                setSubmitResult(null);
                 toast.info('Editor reset to the starter code.');
               }}
             >
@@ -775,35 +781,9 @@ const CodingProblemPage = ({ isDebugging = false }) => {
             readOnly={submissionLocked}
             height="100%"
             onRunShortcut={handleRun}
-            onSubmitShortcut={handleSubmit}
             ariaLabel={`${currentLanguageLabel} code editor for ${problem.title}`}
           />
         </div>
-
-        {/* Verdict: shown above the console so it is impossible to miss. */}
-        {verdict && (
-          <div className={`coding-verdict coding-verdict--${verdict.tone}`} role="status">
-            <verdict.icon className="coding-verdict-icon" />
-            <div className="coding-verdict-main">
-              <strong>{verdict.message || `${verdict.passedCases}/${verdict.totalCases} test cases passed`}</strong>
-              <span>
-                {verdict.status === 'accepted'
-                  ? `Full marks — ${verdict.score}/${verdict.maxScore} points`
-                  : `${verdict.passedCases}/${verdict.totalCases} passed · ${verdict.score}/${verdict.maxScore} points`}
-                {verdict.rank != null && ` · Rank #${verdict.rank}`}
-              </span>
-            </div>
-            {verdict.status === 'accepted' && nextProblem && (
-              <button
-                type="button"
-                className="coding-verdict-next"
-                onClick={() => goToNeighbour(1)}
-              >
-                Next problem →
-              </button>
-            )}
-          </div>
-        )}
 
         <div className="coding-actions">
           <div className="coding-case-summary">
@@ -812,7 +792,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
                 {runResult.cases?.filter((c) => c.passed).length ?? 0}/{runResult.cases?.length ?? 0} sample cases passed
               </span>
             ) : (
-              <span className="coding-muted">Ctrl + Enter to submit</span>
+              <span className="coding-muted">Run sample cases to check your code.</span>
             )}
           </div>
           <div className="coding-action-buttons">
@@ -820,23 +800,12 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               type="button"
               className="btn-outline-techiz"
               onClick={handleRun}
-              disabled={running || submitting || sandboxDown || submissionLocked}
+              disabled={running || sandboxDown || submissionLocked}
               title="Run against the sample cases (F9)"
             >
-              <FiPlay /> {running ? 'Running…' : 'Run'}
+              <FiPlay /> {running ? 'Running…' : 'Run Code'}
             </button>
-            {isAssessmentActive ? (
-              <span className="coding-muted coding-assessment-submit-note">Submit the assessment when all 8 answers are ready.</span>
-            ) : !isAssessmentSubmitted && <button
-              type="button"
-              className="btn-techiz"
-              onClick={handleSubmit}
-              disabled={submitting || running || sandboxDown || submissionLocked}
-              title="Submit for grading (Ctrl + Enter)"
-            >
-              <FiUploadCloud /> {submitting ? 'Submitting…' : 'Submit'}
-            </button>}
-            {isAssessmentSubmitted && <span className="coding-muted">Final answer is locked and read-only.</span>}
+            {isAssessmentSubmitted && <span className="coding-muted">Assessment answers are locked and read-only.</span>}
           </div>
         </div>
 
@@ -866,8 +835,8 @@ const CodingProblemPage = ({ isDebugging = false }) => {
         </div>
         <div className="coding-console-shell" style={{ height: `${consoleHeight}px` }}>
           <CodeConsole
-            result={submitResult || runResult}
-            running={running || submitting}
+            result={runResult}
+            running={running}
             error={consoleError}
           />
         </div>
@@ -891,16 +860,12 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               <FiAlertTriangle />
             </div>
             <h2 id="coding-guard-title">
-              {guardDialog.kind === 'starter'
-                ? guardDialog.action === 'run' ? 'Starter Code Not Modified' : 'Cannot Submit Starter Code'
-                : 'Short Solution Warning'}
+              {guardDialog.kind === 'starter' ? 'Starter Code Not Modified' : 'Short Code Warning'}
             </h2>
             <p id="coding-guard-message">
               {guardDialog.kind === 'starter'
-                ? guardDialog.action === 'run'
-                  ? 'You have not modified the default code template. Please write your solution before running.'
-                  : 'You must write a solution before submitting.'
-                : 'Your solution appears incomplete. Do you still want to continue?'}
+                ? 'You have not modified the default code template. Please write some code before running.'
+                : 'Your code appears incomplete. Do you still want to run it?'}
             </p>
             <div className="coding-guard-actions">
               {guardDialog.kind === 'starter' ? (
@@ -921,81 +886,6 @@ const CodingProblemPage = ({ isDebugging = false }) => {
           </section>
         </div>
       )}
-    </div>
-  );
-};
-
-// ─── Submissions tab ──────────────────────────────────────────────────────────
-const SubmissionsTab = ({ problemId, onReload }) => {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(null);
-  const [detail, setDetail] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api.get('/coding/submissions/me', { params: { problemId, limit: 20 } })
-      .then(({ data }) => { if (!cancelled) setRows(data.data || []); })
-      .catch(() => { if (!cancelled) setRows([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [problemId]);
-
-  const openRow = async (id) => {
-    if (expanded === id) { setExpanded(null); setDetail(null); return; }
-    setExpanded(id);
-    setDetail(null);
-    try {
-      const { data } = await api.get(`/coding/submissions/${id}`);
-      setDetail(data.data);
-    } catch {
-      setDetail({ error: 'Could not load that submission.' });
-    }
-  };
-
-  if (loading) return <div className="coding-center"><InlineSpinner /></div>;
-  if (rows.length === 0) {
-    return (
-      <div className="coding-empty coding-empty--inline">
-        <FiClock size={28} />
-        <p>You have not submitted a solution for this problem yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="coding-submissions">
-      {rows.map((s) => {
-        const meta = VERDICT[s.status] || VERDICT.internalError;
-        const Icon = meta.icon;
-        const isOpen = expanded === s._id;
-        return (
-          <div key={s._id} className={`coding-sub-row coding-verdict--${meta.tone}`}>
-            <button type="button" className="coding-sub-summary" onClick={() => openRow(s._id)}>
-              <Icon />
-              <span className="coding-sub-status">{meta.label}</span>
-              <span className="coding-sub-score">{s.score}/{s.maxScore}</span>
-              <span className="coding-sub-lang">{s.language}</span>
-              <span className="coding-sub-time">
-                {s.submittedAt ? new Date(s.submittedAt).toLocaleString() : ''}
-              </span>
-            </button>
-            {isOpen && (
-              <div className="coding-sub-detail">
-                {!detail && <div className="coding-center"><InlineSpinner size={16} /></div>}
-                {detail?.error && <p className="coding-muted">{detail.error}</p>}
-                {detail?.code && <CodeBlock text={detail.code} />}
-                {detail?.problemId && (
-                  <button type="button" className="btn-outline-techiz coding-tool-btn-text" onClick={onReload}>
-                    Re-submit current code
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 };

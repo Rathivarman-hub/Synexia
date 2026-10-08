@@ -6,7 +6,14 @@ import { toast } from 'react-toastify';
 import logo from '../../assets/1logo.png';
 
 const RegisterPage = () => {
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', college: '', rollNumber: '' });
+  const [form, setForm] = useState({
+    teamName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    college: '',
+    teamHeadMobileNumber: '',
+  });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -21,8 +28,14 @@ const RegisterPage = () => {
     if (form.password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
-      const user = await register({ name: form.name, email: form.email, password: form.password, college: form.college, rollNumber: form.rollNumber });
-      toast.success(`Account created! Welcome to SYNEXIA, ${user.name?.split(' ')[0]}!`);
+      const user = await register({
+        name: form.teamName,
+        email: form.email,
+        password: form.password,
+        college: form.college,
+        teamHeadMobileNumber: form.teamHeadMobileNumber,
+      });
+      toast.success(`Account created! Welcome to SYNEXIA, ${user.name}!`);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
@@ -32,10 +45,10 @@ const RegisterPage = () => {
   };
 
   const fields = [
-    { name: 'name', label: 'Full Name', type: 'text', placeholder: 'John Doe', required: true },
+    { name: 'teamName', label: 'Team Name', type: 'text', placeholder: 'Enter your team name', required: true },
     { name: 'email', label: 'Email Address', type: 'email', placeholder: 'you@college.edu', required: true },
     { name: 'college', label: 'College Name', type: 'text', placeholder: 'Anna University, Chennai' },
-    { name: 'rollNumber', label: 'Roll Number', type: 'text', placeholder: '20CS001' },
+    { name: 'teamHeadMobileNumber', label: 'Team Head Mobile Number', type: 'tel', placeholder: '+91 98765 43210', required: true },
     { name: 'password', label: 'Password', type: 'password', placeholder: 'Min 6 characters', required: true },
     { name: 'confirmPassword', label: 'Confirm Password', type: 'password', placeholder: 'Repeat password', required: true },
   ];
@@ -57,7 +70,7 @@ const RegisterPage = () => {
               <Form onSubmit={handleSubmit}>
                 <Row className="g-3">
                   {fields.map((f) => (
-                    <Col key={f.name} md={f.name === 'name' || f.name === 'email' ? 12 : 6}>
+                    <Col key={f.name} md={f.name === 'teamName' || f.name === 'email' ? 12 : 6}>
                       <Form.Group>
                         <label className="techiz-label">{f.label} {f.required && <span style={{ color: 'var(--danger)' }}>*</span>}</label>
                         <input
@@ -68,6 +81,7 @@ const RegisterPage = () => {
                           value={form[f.name]}
                           onChange={handleChange}
                           required={f.required}
+                          autoComplete={f.name === 'teamHeadMobileNumber' ? 'tel' : undefined}
                         />
                       </Form.Group>
                     </Col>

@@ -63,28 +63,36 @@
 .assessment-warning-primary:hover { background: #E6008C; }
 .assessment-session-controls {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .assessment-countdown {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.assessment-countdown svg { width: 14px; height: 14px; }
+.assessment-countdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.assessment-countdown-label svg { width: 14px; height: 14px; }
+.assessment-countdown-value { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.04em; }
 .assessment-countdown.is-urgent { color: var(--danger); border-color: var(--danger); }
 
 .assessment-finish-button,

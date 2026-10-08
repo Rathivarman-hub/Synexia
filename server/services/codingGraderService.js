@@ -1,6 +1,14 @@
 import { runBatch } from './codeExecutionService.js';
+import { getStarterTemplate } from '../config/languages.js';
+import { isAcceptedEvaluation, calculateAwardedPoints } from './assessmentScoring.js';
 
 const WHITESPACE_RUN = /\s+/g;
+
+export const isBoilerplateCode = (language, code) => {
+  const template = getStarterTemplate(language);
+  return Boolean(template)
+    && String(code ?? '').replace(WHITESPACE_RUN, '') === template.replace(WHITESPACE_RUN, '');
+};
 
 export const normalizeOutput = (value) => {
   if (value === null || value === undefined) return '';
@@ -75,18 +83,31 @@ export const grade = (problem, execResults) => {
 
   const accuracy = totalCases > 0 ? Math.round((passedCases / totalCases) * 1000) / 10 : 0;
 
-  // WHY: partial credit is proportional to cases passed, capped at the problem's
-  // points. This keeps the leaderboard meaningful (a 7/10 solution earns credit)
-  // while still reserving full marks for a fully correct solution.
-  const score = status === 'accepted' ? maxScore : Math.floor((accuracy / 100) * maxScore);
+  // Assessment points are all-or-nothing: one failed test means no points.
+  const accepted = isAcceptedEvaluation({
+    status,
+    passedTests: passedCases,
+    totalTests: totalCases,
+    accepted: status === 'accepted',
+  });
+  const score = calculateAwardedPoints({
+    status,
+    passedTests: passedCases,
+    totalTests: totalCases,
+    accepted,
+  }, maxScore);
 
   return {
     status,
+    accepted,
     passedCases,
+    passedTests: passedCases,
     failedCases: totalCases - passedCases,
     totalCases,
+    totalTests: totalCases,
     accuracy,
     score,
+    awardedPoints: score,
     maxScore,
     executionTime,
     memoryUsageKB,
@@ -102,6 +123,38 @@ export const grade = (problem, execResults) => {
  */
 export const gradeSubmission = async (problem, { language, code, timeLimitMs = 5000 }) => {
   const testCases = problem.testCases || [];
+  const unchangedTemplate = isBoilerplateCode(language, code);
+  if (!String(code ?? '').trim() || unchangedTemplate) {
+    const cases = testCases.map((testCase, index) => ({
+      index,
+      input: testCase.hidden ? null : testCase.input,
+      expectedOutput: testCase.hidden ? null : testCase.expectedOutput,
+      hidden: Boolean(testCase.hidden),
+      passed: false,
+      status: 'not-attempted',
+      output: null,
+      error: null,
+      executionTime: 0,
+      memoryUsageKB: 0,
+    }));
+    return {
+      status: 'not-attempted',
+      accepted: false,
+      passedCases: 0,
+      passedTests: 0,
+      failedCases: testCases.length,
+      totalCases: testCases.length,
+      totalTests: testCases.length,
+      accuracy: 0,
+      score: 0,
+      awardedPoints: 0,
+      maxScore: problem.points || 0,
+      executionTime: 0,
+      memoryUsageKB: 0,
+      message: unchangedTemplate ? 'Starter code was not modified.' : 'No code was submitted.',
+      cases,
+    };
+  }
   const execResults = await runBatch({
     language,
     code,

@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import { FiAlertTriangle, FiClock, FiUploadCloud } from 'react-icons/fi';
 import { useAssessmentSession } from '../context/AssessmentSessionContext';
-import { formatElapsed } from '../hooks/useElapsedTimer';
+
+const formatAssessmentTime = (seconds) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(remainingSeconds)}`;
+};
 
 const AssessmentFinishControl = () => {
   const {
@@ -15,20 +22,19 @@ const AssessmentFinishControl = () => {
   return (
     <>
       <div className="assessment-session-controls">
-        <span
-          className={`assessment-countdown${remainingSeconds <= 300 ? ' is-urgent' : ''}`}
-          role="timer"
-          aria-label={`${formatElapsed(remainingSeconds * 1000)} remaining`}
-        >
-          <FiClock /> {formatElapsed(remainingSeconds * 1000)} left
-        </span>
+        <div className={`assessment-countdown${remainingSeconds <= 300 ? ' is-urgent' : ''}`}>
+          <span className="assessment-countdown-label"><FiClock /> Assessment Time Remaining</span>
+          <span className="assessment-countdown-value" role="timer" aria-label={`${formatAssessmentTime(remainingSeconds)} remaining`}>
+            {formatAssessmentTime(remainingSeconds)}
+          </span>
+        </div>
         <button
           type="button"
           className="assessment-finish-button"
           onClick={() => setConfirming(true)}
           disabled={assessmentSubmitting}
         >
-          <FiUploadCloud /> {assessmentSubmitting ? 'Submitting…' : 'Submit assessment'}
+          <FiUploadCloud /> {assessmentSubmitting ? 'Submitting…' : 'Submit Assessment'}
         </button>
       </div>
 
@@ -72,7 +78,7 @@ const AssessmentFinishControl = () => {
                 }}
                 disabled={assessmentSubmitting}
               >
-                {assessmentSubmitting ? 'Submitting…' : 'Submit assessment'}
+                {assessmentSubmitting ? 'Submitting…' : 'Submit Assessment'}
               </button>
             </div>
           </section>

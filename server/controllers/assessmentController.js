@@ -1,22 +1,79 @@
 import asyncHandler from 'express-async-handler';
 import AssessmentSession from '../models/AssessmentSession.js';
 import AssessmentSubmission from '../models/AssessmentSubmission.js';
+import CodingSubmission from '../models/CodingSubmission.js';
+import DebuggingSubmission from '../models/DebuggingSubmission.js';
 import CodingProblem from '../models/CodingProblem.js';
 import DebuggingProblem from '../models/DebuggingProblem.js';
 import { LANGUAGE_KEYS } from '../config/languages.js';
-import { gradeSubmission } from '../services/codingGraderService.js';
-import { isConfigured } from '../services/codeExecutionService.js';
+import { isBoilerplateCode } from '../services/codingGraderService.js';
+import {
+  normalizeAssessmentSubmissionScore,
+  resolveAssessmentAnswer,
+} from '../services/assessmentScoring.js';
 import { deleteCache, deleteCachePattern } from '../utils/cache.js';
 import { invalidateAdminDashboardCache } from '../utils/adminDashboardCache.js';
 import logger from '../config/logger.js';
 
 const QUESTION_COUNT = 8;
 const DURATION_MS = 90 * 60 * 1000;
-const TIME_LIMIT_MS = Number(process.env.CODE_TIME_LIMIT_MS) || 5000;
 const WARNING_LIMIT = 3;
 const FINALIZATION_STALE_MS = 5 * 60 * 1000;
 
 const modelFor = (type) => (type === 'debugging' ? DebuggingProblem : CodingProblem);
+const submissionModelFor = (type) => (type === 'debugging' ? DebuggingSubmission : CodingSubmission);
+
+export const getMySavedAnswer = (assessmentType) => asyncHandler(async (req, res) => {
+  const problem = await modelFor(assessmentType)
+    .findOne({ slug: req.params.slug })
+    .select('_id slug')
+    .lean();
+  if (!problem) {
+    res.status(404);
+    throw new Error('Problem not found.');
+  }
+
+  const assessment = await AssessmentSubmission.findOne({
+    userId: req.user._id,
+    assessmentType,
+    submitted: true,
+    'answers.questionId': problem._id,
+  })
+    .select('answers')
+    .lean({ flattenMaps: true });
+  const assessmentAnswer = assessment?.answers?.find(
+    (answer) => String(answer.questionId) === String(problem._id)
+  );
+  if (assessmentAnswer) {
+    res.json({
+      success: true,
+      data: {
+        language: assessmentAnswer.language,
+        code: assessmentAnswer.code,
+        codeByLanguage: assessmentAnswer.codeByLanguage || {},
+        source: 'assessment',
+      },
+    });
+    return;
+  }
+
+  const standaloneAnswer = await submissionModelFor(assessmentType)
+    .findOne({ userId: req.user._id, problemId: problem._id, isRun: false })
+    .select('language code submittedAt')
+    .sort({ submittedAt: -1 })
+    .lean();
+  res.json({
+    success: true,
+    data: standaloneAnswer
+      ? {
+        language: standaloneAnswer.language,
+        code: standaloneAnswer.code,
+        codeByLanguage: {},
+        source: 'submission',
+      }
+      : null,
+  });
+});
 
 const orderedQuestions = async (type) => {
   const Problem = modelFor(type);
@@ -78,18 +135,6 @@ const invalidateAssessmentCaches = async (userId) => Promise.all([
   deleteCachePattern('coding:rank:*'),
   deleteCache(`coding:stats:assessment:${userId}`),
 ]);
-
-const emptyGrade = (points) => ({
-  status: 'wrong-answer',
-  passedCases: 0,
-  failedCases: 0,
-  totalCases: 0,
-  accuracy: 0,
-  score: 0,
-  maxScore: points || 0,
-  executionTime: 0,
-  cases: [],
-});
 
 const debuggingGraderProblem = (problem) => ({
   points: problem.points,
@@ -178,11 +223,14 @@ export const getMyAssessment = (assessmentType) => asyncHandler(async (req, res)
   const submission = await AssessmentSubmission.findOne({
     userId: req.user._id,
     assessmentType,
-  }).lean();
+  }).lean({ flattenMaps: true });
   if (submission) {
     const repaired = await markSessionSubmitted(submission.sessionId, req.user._id, assessmentType, submission.submittedAt);
     if (repaired) await invalidateAssessmentCaches(req.user._id);
-    res.json({ success: true, data: { submitted: true, submission } });
+    res.json({
+      success: true,
+      data: { submitted: true, submission: normalizeAssessmentSubmissionScore(submission) },
+    });
     return;
   }
 
@@ -235,7 +283,7 @@ export const recordAssessmentWarning = (assessmentType) => asyncHandler(async (r
       $inc: { warningCount: 1 },
       $push: { warningEvents: { $each: [event], $slice: -WARNING_LIMIT } },
     },
-    { new: true }
+    { returnDocument: 'after' }
   ).select('warningCount warningEvents');
 
   if (recorded) {
@@ -270,7 +318,11 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
   if (existingSubmission) {
     await markSessionSubmitted(existingSubmission.sessionId, req.user._id, assessmentType, existingSubmission.submittedAt);
     await invalidateAssessmentCaches(req.user._id);
-    res.json({ success: true, alreadySubmitted: true, data: existingSubmission });
+    res.json({
+      success: true,
+      alreadySubmitted: true,
+      data: normalizeAssessmentSubmissionScore(existingSubmission),
+    });
     return;
   }
 
@@ -314,6 +366,9 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
       : '+hiddenTestCases title slug points testCases')
     .lean();
   const problemMap = new Map(problems.map((problem) => [String(problem._id), problem]));
+  const evaluationMap = new Map(
+    (session.evaluations || []).map((evaluation) => [String(evaluation.questionId), evaluation])
+  );
   const orderedProblems = session.questionIds.map((id) => problemMap.get(String(id)));
   if (orderedProblems.some((problem) => !problem)) {
     res.status(409);
@@ -328,12 +383,16 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
       status: 'in-progress',
     },
     { $set: { status: 'finalizing' } },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!finalizingSession) {
     const saved = await AssessmentSubmission.findOne({ userId: req.user._id, assessmentType }).lean();
     if (saved) {
-      res.json({ success: true, alreadySubmitted: true, data: saved });
+      res.json({
+        success: true,
+        alreadySubmitted: true,
+        data: normalizeAssessmentSubmissionScore(saved),
+      });
       return;
     }
     res.status(409);
@@ -349,54 +408,36 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
     const testProblem = assessmentType === 'debugging'
       ? debuggingGraderProblem(problem)
       : problem;
-    if (!code.trim() || (assessmentType === 'debugging' && !problem.languageTemplates?.[language])) {
-      return {
-        questionId: problem._id,
-        title: problem.title,
-        slug: problem.slug,
-        language,
-        code,
-        ...emptyGrade(problem.points),
-        failedCases: (testProblem.testCases || []).length,
-        totalCases: (testProblem.testCases || []).length,
-      };
-    }
-
-    let result;
-    if (!isConfigured()) {
-      result = {
-        ...emptyGrade(problem.points),
-        status: 'internal-error',
-        message: 'Code execution is unavailable; this answer was saved without a score.',
-      };
-    } else {
-      try {
-        result = await gradeSubmission(testProblem, { language, code, timeLimitMs: TIME_LIMIT_MS });
-      } catch (error) {
-        logger.error(`Assessment grading failed: type=${assessmentType} user=${req.user._id} question=${problem.slug} error=${error.message}`);
-        result = {
-          ...emptyGrade(problem.points),
-          status: 'internal-error',
-          message: 'Grading failed; this answer was saved without a score.',
-        };
-      }
-    }
+    const storedEvaluation = evaluationMap.get(String(problem._id));
+    const resolved = resolveAssessmentAnswer({
+      answer,
+      evaluation: storedEvaluation,
+      maxPoints: problem.points || 0,
+      questionTestCount: (testProblem.testCases || []).length,
+      boilerplate: isBoilerplateCode(language, code),
+    });
 
     return {
+      problemId: problem._id,
       questionId: problem._id,
       title: problem.title,
       slug: problem.slug,
       language,
       code,
-      status: result.status,
-      passedCases: result.passedCases || 0,
-      failedCases: result.failedCases || 0,
-      totalCases: result.totalCases || 0,
-      accuracy: result.accuracy || 0,
-      score: result.score || 0,
-      maxScore: result.maxScore ?? problem.points ?? 0,
-      executionTime: result.executionTime || 0,
-      testResults: result.cases || [],
+      codeByLanguage: answer?.codeByLanguage || {},
+      status: resolved.status,
+      accepted: resolved.accepted,
+      passedTests: resolved.passedTests,
+      totalTests: resolved.totalTests,
+      awardedPoints: resolved.awardedPoints,
+      passedCases: resolved.passedTests,
+      failedCases: resolved.failedTests,
+      totalCases: resolved.totalTests,
+      accuracy: resolved.accuracy,
+      score: resolved.awardedPoints,
+      maxScore: problem.points || 0,
+      executionTime: 0,
+      testResults: [],
     };
     }));
   } catch (error) {
@@ -411,13 +452,13 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
     throw error;
   }
 
-  const score = results.reduce((sum, answer) => sum + answer.score, 0);
+  const score = results.reduce((sum, answer) => sum + answer.awardedPoints, 0);
   const maxScore = results.reduce((sum, answer) => sum + answer.maxScore, 0);
   const passedCases = results.reduce((sum, answer) => sum + answer.passedCases, 0);
   const totalCases = results.reduce((sum, answer) => sum + answer.totalCases, 0);
   const status = results.every((answer) => answer.status === 'accepted')
     ? 'accepted'
-    : results.some((answer) => answer.score > 0)
+    : results.some((answer) => answer.awardedPoints > 0)
       ? 'partial'
       : results.find((answer) => answer.status === 'internal-error')?.status || 'wrong-answer';
 

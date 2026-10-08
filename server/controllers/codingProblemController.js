@@ -198,7 +198,7 @@ export const getProblems = asyncHandler(async (req, res) => {
  */
 export const getProblem = asyncHandler(async (req, res) => {
   const { slug } = req.params;
-  const cacheKey = `coding:problem:v2:${slug}`;
+  const cacheKey = `coding:problem:v3:${slug}`;
 
   // WHY the cache is per-problem, not per-user: the problem body is identical for
   // every student, so it must be cached ONCE and shared. The per-user Status
@@ -243,12 +243,7 @@ export const getProblem = asyncHandler(async (req, res) => {
       hints: doc.hints,
       examples: doc.examples,
       starterCodeTemplates,
-      starterCode: Object.fromEntries(
-        LANGUAGE_KEYS.map((language) => [
-          language,
-          doc.starterCode?.[language] || starterCodeTemplates[language],
-        ])
-      ),
+      starterCode: starterCodeTemplates,
       // Sample cases only. The hidden flag is stripped for the client too —
       // revealing WHICH cases are hidden is a free hint about their shape.
       testCases: (doc.testCases || [])
@@ -283,7 +278,7 @@ export const getStarterCode = asyncHandler(async (req, res) => {
   const { language } = req.query;
 
   const doc = await CodingProblem.findOne({ slug, isActive: true })
-    .select('title starterCode')
+    .select('_id')
     .lean();
 
   if (!doc) {
@@ -291,13 +286,13 @@ export const getStarterCode = asyncHandler(async (req, res) => {
     throw new Error('Problem not found');
   }
 
-  const code = doc.starterCode?.[language] || getStarterTemplate(language);
+  const code = getStarterTemplate(language);
   res.json({
     success: true,
     data: {
       language,
       code,
-      isTemplate: !doc.starterCode?.[language],
+      isTemplate: true,
       template: code,
     },
   });

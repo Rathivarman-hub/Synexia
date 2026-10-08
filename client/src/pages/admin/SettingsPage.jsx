@@ -34,7 +34,6 @@ const SettingsPage = () => {
         canvas.height = Math.max(1, Math.round(image.height * scale));
         canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
         const compressedAvatar = canvas.toDataURL('image/jpeg', 0.82);
-        localStorage.setItem('techiz-avatar', compressedAvatar);
         setAvatar(compressedAvatar);
       };
       image.onerror = () => toast.error('Could not read this image');
@@ -48,12 +47,19 @@ const SettingsPage = () => {
     if (form.password && form.password !== form.confirmPassword) { toast.error('Passwords do not match'); return; }
     setSaving(true);
     try {
-      const payload = { name: form.name, avatar };
+      const isLocalImage = avatar.startsWith('data:image/');
+      const payload = { name: form.name };
+      if (!isLocalImage) payload.avatar = avatar;
       if (form.password) payload.password = form.password;
       const { data } = await api.put('/auth/me', payload);
-      updateUser({ ...data.data, avatar: data.data.avatar || avatar });
-      setAvatar(data.data.avatar || avatar);
-      toast.success('Settings saved');
+      const updatedAvatar = isLocalImage ? avatar : data.data.avatar || '';
+      updateUser({ ...data.data, avatar: updatedAvatar });
+      setAvatar(updatedAvatar);
+      if (isLocalImage) {
+        toast.info('Settings saved. Profile photos must use a hosted image URL to sync with your account.');
+      } else {
+        toast.success('Settings saved');
+      }
       setForm((f) => ({ ...f, password: '', confirmPassword: '' }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Save failed');
@@ -83,7 +89,7 @@ const SettingsPage = () => {
             <div>
               <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1.1rem' }}>{user?.name}</div>
               <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{user?.email}</div>
-              <span style={{ fontSize: '0.7rem', padding: '2px 10px', borderRadius: 12, background: 'rgba(108,99,255,0.15)', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>Admin</span>
+              <span style={{ display: 'inline-block', fontSize: '0.72rem', padding: '3px 10px', borderRadius: 12, background: '#D1007A', color: '#FFFFFF', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Admin</span>
             </div>
           </div>
 

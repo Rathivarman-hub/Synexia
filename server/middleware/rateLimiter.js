@@ -71,36 +71,28 @@ export const adminLimiter = buildLimiter({
 // the general 200/min IP allowance. 30 runs/min per user is generous for genuine
 // iteration while capping the blast radius of a scripted submit loop.
 //
-// WHY lazily built rather than a module-level const: buildLimiter() checks
-// isRedisConnected() to decide whether to attach the shared RedisStore, and at
-// module-evaluation time connectRedis() has not run yet (see server.js — imports
-// resolve before startServer). A const limiter would therefore ALWAYS fall back to
-// the in-memory store and be useless across PM2 workers. Deferring construction to
-// first request means Redis is genuinely connected when the decision is made.
+// Use an in-memory limiter during module initialization, then replace it during
+// server startup if Redis connected. Constructing a limiter in request middleware
+// triggers express-rate-limit's request-time initialization warning.
 const CODE_LIMIT_WINDOW_MS = 60 * 1000;
 const CODE_LIMIT_MAX = 30;
 
-let codeLimiterInstance = null;
-let codeLimiterUsesRedis = null;
+const createCodeLimiter = (useRedis) => buildLimiter({
+  windowMs: CODE_LIMIT_WINDOW_MS,
+  max: CODE_LIMIT_MAX,
+  message: 'You are submitting code too quickly. Please wait a moment before running or submitting again.',
+  prefix: 'rl:code:',
+  // Key on userId to avoid locking out everyone behind a shared campus NAT.
+  keyGenerator: (req) => req.user?._id || ipKeyGenerator(req.ip || 'unknown'),
+  useRedis,
+});
 
-const getCodeLimiter = () => {
-  const useRedis = isRedisConnected();
-  if (!codeLimiterInstance || codeLimiterUsesRedis !== useRedis) {
-    codeLimiterInstance = buildLimiter({
-      windowMs: CODE_LIMIT_WINDOW_MS,
-      max: CODE_LIMIT_MAX,
-      message: 'You are submitting code too quickly. Please wait a moment before running or submitting again.',
-      prefix: 'rl:code:',
-      // WHY key on userId: a college campus puts hundreds of students behind one
-      // NAT address, so an IP-keyed limit would lock out an entire lab at once.
-      // ipKeyGenerator is still used for unauthenticated requests so IPv6
-      // addresses are normalised rather than bucketed by /64.
-      keyGenerator: (req) => req.user?._id || ipKeyGenerator(req.ip || 'unknown'),
-      useRedis,
-    });
-    codeLimiterUsesRedis = useRedis;
+let codeLimiterInstance = createCodeLimiter(false);
+
+export const initializeCodeLimiter = () => {
+  if (isRedisConnected()) {
+    codeLimiterInstance = createCodeLimiter(true);
   }
-  return codeLimiterInstance;
 };
 
-export const codeLimiter = (req, res, next) => getCodeLimiter()(req, res, next);
+export const codeLimiter = (req, res, next) => codeLimiterInstance(req, res, next);

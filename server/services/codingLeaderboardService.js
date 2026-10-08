@@ -12,6 +12,17 @@ const scoredRowsPipeline = (userFilter = {}) => [
       totalCases: { $convert: { input: '$totalCases', to: 'double', onError: 0, onNull: 0 } },
     },
   },
+  {
+    $set: {
+      score: {
+        $cond: [
+          { $and: [{ $eq: ['$status', 'accepted'] }, { $gt: ['$totalCases', 0] }, { $eq: ['$passedCases', '$totalCases'] }] },
+          '$maxScore',
+          0,
+        ],
+      },
+    },
+  },
   { $match: { ...userFilter, isRun: { $ne: true }, score: { $gte: 0 } } },
   {
     $unionWith: {
@@ -23,6 +34,17 @@ const scoredRowsPipeline = (userFilter = {}) => [
             maxScore: { $convert: { input: '$maxScore', to: 'double', onError: 0, onNull: 0 } },
             passedCases: { $convert: { input: '$passedCases', to: 'double', onError: 0, onNull: 0 } },
             totalCases: { $convert: { input: '$totalCases', to: 'double', onError: 0, onNull: 0 } },
+          },
+        },
+        {
+          $set: {
+            score: {
+              $cond: [
+                { $and: [{ $eq: ['$status', 'accepted'] }, { $gt: ['$totalCases', 0] }, { $eq: ['$passedCases', '$totalCases'] }] },
+                '$maxScore',
+                0,
+              ],
+            },
           },
         },
         { $match: { ...userFilter, isRun: { $ne: true }, score: { $gte: 0 } } },
@@ -47,6 +69,23 @@ const scoredRowsPipeline = (userFilter = {}) => [
             'answers.maxScore': { $convert: { input: '$answers.maxScore', to: 'double', onError: 0, onNull: 0 } },
             'answers.passedCases': { $convert: { input: '$answers.passedCases', to: 'double', onError: 0, onNull: 0 } },
             'answers.totalCases': { $convert: { input: '$answers.totalCases', to: 'double', onError: 0, onNull: 0 } },
+          },
+        },
+        {
+          $set: {
+            'answers.score': {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$answers.status', 'accepted'] },
+                    { $gt: ['$answers.totalCases', 0] },
+                    { $eq: ['$answers.passedCases', '$answers.totalCases'] },
+                  ],
+                },
+                '$answers.maxScore',
+                0,
+              ],
+            },
           },
         },
         {
@@ -259,6 +298,17 @@ export const getUserProblemStatusMap = async (userId, problemIds) => {
         problemId: { $in: problemIds },
       },
     },
+      {
+        $set: {
+          score: {
+            $cond: [
+              { $and: [{ $eq: ['$status', 'accepted'] }, { $gt: ['$totalCases', 0] }, { $eq: ['$passedCases', '$totalCases'] }] },
+              '$maxScore',
+              0,
+            ],
+          },
+        },
+      },
     {
       $unionWith: {
         coll: 'assessmentsubmissions',
@@ -266,6 +316,23 @@ export const getUserProblemStatusMap = async (userId, problemIds) => {
           { $match: { userId: new mongoose.Types.ObjectId(String(userId)), assessmentType: 'coding', submitted: true } },
           { $unwind: '$answers' },
           { $match: { 'answers.questionId': { $in: problemIds } } },
+          {
+            $set: {
+              'answers.score': {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$answers.status', 'accepted'] },
+                      { $gt: ['$answers.totalCases', 0] },
+                      { $eq: ['$answers.passedCases', '$answers.totalCases'] },
+                    ],
+                  },
+                  '$answers.maxScore',
+                  0,
+                ],
+              },
+            },
+          },
           {
             $project: {
               problemId: '$answers.questionId',

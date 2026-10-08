@@ -68,11 +68,11 @@ const assessmentSchema = Joi.object({
     type: Joi.string().valid('fullscreen-exit', 'visibility-hidden', 'window-blur', 'context-switch', 'developer-tools', 'escape').required(),
     occurredAt: Joi.date().iso().required(),
   })).max(3).default([]),
-  elapsedSeconds: Joi.number().integer().min(0).default(0),
 }).default({});
 
 const executionSchema = Joi.object({
   problemId: Joi.string().hex().length(24).required(),
+  assessmentSessionId: Joi.string().hex().length(24),
   language: Joi.string().valid(...LANGUAGE_KEYS).required(),
   code: Joi.string().allow('').max(20000).required(),
 });
