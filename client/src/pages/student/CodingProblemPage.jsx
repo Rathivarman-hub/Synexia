@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
 import { getChangedCodeLength, isStarterCode } from '../../lib/starterCodeValidation';
 import MonacoEditor from '../../components/MonacoEditor';
 import CodeConsole from '../../components/CodeConsole';
@@ -16,13 +17,12 @@ import {
 } from 'react-icons/fi';
 import './CodingProblemPage.css';
 
-const DRAFT_PREFIX = 'syn-coding-draft:v2:';
 const MIN_EDITOR_HEIGHT = 250;
 const MIN_CONSOLE_HEIGHT = 120;
 const MAX_CONSOLE_RATIO = 0.6;
 
-const draftKey = (slug, language, isDebugging = false) =>
-  `${isDebugging ? 'syn-debug-draft:v2:' : DRAFT_PREFIX}${slug}:${language}`;
+const draftKey = (studentId, sessionId, problemId, language, isDebugging = false) =>
+  `syn-workspace:v1:${studentId}:${sessionId || 'practice'}:${isDebugging ? 'debugging' : 'coding'}:${problemId}:${language}`;
 const MIN_SOLUTION_CHANGE = 20;
 
 /** Monospace, whitespace-preserving rendering of a multi-line I/O example. */
@@ -31,6 +31,8 @@ const CodeBlock = ({ text }) => <pre className="coding-io-block">{text === '' ? 
 const CodingProblemPage = ({ isDebugging = false }) => {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const studentId = user?._id || user?.id || null;
   const {
     assessmentAnswers,
     assessmentSessionId,
@@ -38,12 +40,15 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     isAssessmentSubmitted,
     assessmentSubmitting,
     recordAssessmentAnswer,
+    recordAssessmentDraft,
+    recordAssessmentEvaluation,
   } = useAssessmentSession();
 
   const [problem, setProblem] = useState(null);
+  const [loadedStudentId, setLoadedStudentId] = useState(null);
   const [serverSavedAnswer, setServerSavedAnswer] = useState(null);
   const [language, setLanguage] = useState(() => {
-    try { return localStorage.getItem(`syn-assessment-language:v1:${slug}`) || 'python'; } catch { return 'python'; }
+    return 'python';
   });
   // Preserve each language's student draft while switching editor templates.
   const [codeByLanguage, setCodeByLanguage] = useState({});
@@ -73,6 +78,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const editorRef = useRef(null);
   const resizeStartRef = useRef(null);
   const horizontalResizeRef = useRef(false);
+  const restoredWorkspaceRef = useRef(null);
 
   const [runResult, setRunResult] = useState(null);
   const [running, setRunning] = useState(false);
@@ -171,21 +177,45 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   // and the slower response must not overwrite the newer result.
   const runSeq = useRef(0);
 
-  const readDraftForLanguage = useCallback((languageKey, template) => {
+  const readDraftForLanguage = useCallback((languageKey, template, problemId) => {
+    if (!problemId) return template;
+    if (!studentId) return template;
     let saved = '';
-    try { saved = localStorage.getItem(draftKey(slug, languageKey, isDebugging)) || ''; } catch { saved = ''; }
+    try {
+      saved = localStorage.getItem(
+        draftKey(studentId, isAssessmentActive ? assessmentSessionId : null, problemId, languageKey, isDebugging)
+      ) || '';
+    } catch { saved = ''; }
     return saved && !isStarterCode(saved, template) ? saved : template;
-  }, [slug, isDebugging]);
+  }, [studentId, assessmentSessionId, isAssessmentActive, isDebugging]);
 
   const originalStarterCode = problem?.starterCodeTemplates?.[language] || problem?.starterCode?.[language] || '';
+  const assessmentWorkspaceKey = problem && assessmentSessionId
+    ? `${studentId}:${assessmentSessionId}:${problem._id}`
+    : null;
+  const assessmentWorkspaceRestored = !isAssessmentActive
+    || !assessmentWorkspaceKey
+    || restoredWorkspaceRef.current === assessmentWorkspaceKey;
+  const activeAssessmentAnswer = isAssessmentActive && problem
+    ? assessmentAnswers[String(problem._id)]
+    : null;
+  const savedAssessmentCode = activeAssessmentAnswer?.codeByLanguage?.[language]
+    ?? (activeAssessmentAnswer?.language === language ? activeAssessmentAnswer.code : undefined);
+  const activeAssessmentCode = assessmentWorkspaceRestored
+    ? codeByLanguage[language] ?? savedAssessmentCode ?? originalStarterCode
+    : savedAssessmentCode ?? readDraftForLanguage(language, originalStarterCode, problem?._id) ?? originalStarterCode;
   const savedAssessmentAnswer = isAssessmentSubmitted && problem
     ? assessmentAnswers[String(problem._id)]
     : null;
   const savedReviewAnswer = savedAssessmentAnswer || serverSavedAnswer;
   const submittedCodeByLanguage = savedReviewAnswer?.codeByLanguage || {};
-  const code = savedReviewAnswer?.language === language
-    ? savedReviewAnswer.code
-    : submittedCodeByLanguage[language] ?? codeByLanguage[language] ?? '';
+  const code = isAssessmentActive
+    ? activeAssessmentCode
+    : savedReviewAnswer?.language === language
+      ? savedReviewAnswer.code
+      : isAssessmentSubmitted
+        ? submittedCodeByLanguage[language] ?? originalStarterCode
+        : submittedCodeByLanguage[language] ?? codeByLanguage[language] ?? '';
   const hasUnsubmittedLanguageDraft = Boolean(
     savedReviewAnswer
     && savedReviewAnswer.language !== language
@@ -195,20 +225,92 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   const starterUnmodified = isStarterCode(code, originalStarterCode);
   const changedCodeLength = getChangedCodeLength(code, originalStarterCode);
   const setCode = useCallback((next) => {
+    runSeq.current += 1;
+    setRunning(false);
     setCodeByLanguage((prev) => ({ ...prev, [language]: next }));
+    setRunResult(null);
+    setConsoleError('');
+    if (isAssessmentActive && problem) {
+      recordAssessmentAnswer(problem._id, problem.slug, language, next);
+    }
     try {
-      localStorage.setItem(draftKey(slug, language, isDebugging), next);
+      if (studentId) {
+        localStorage.setItem(
+          draftKey(studentId, isAssessmentActive ? assessmentSessionId : null, problem?._id || slug, language, isDebugging),
+          next
+        );
+      }
     } catch { /* quota / private mode */ }
-  }, [language, slug, isDebugging]);
+  }, [
+    language,
+    slug,
+    isDebugging,
+    studentId,
+    assessmentSessionId,
+    isAssessmentActive,
+    problem,
+    recordAssessmentAnswer,
+  ]);
 
   useEffect(() => {
-    const template = problem?.starterCodeTemplates?.[language] || problem?.starterCode?.[language];
-    if (!problem || !template) return;
-    setCodeByLanguage((prev) => {
-      if (prev[language] !== undefined) return prev;
-      return { ...prev, [language]: readDraftForLanguage(language, template) };
+    if (!problem || problem.slug !== slug) return;
+    const assessmentKey = `${studentId}:${assessmentSessionId}:${problem._id}`;
+    const workspaceKey = isAssessmentActive
+      ? assessmentKey
+      : `${studentId}:practice:${isDebugging ? 'debugging' : 'coding'}:${problem._id}`;
+    if (restoredWorkspaceRef.current === workspaceKey) return;
+    restoredWorkspaceRef.current = workspaceKey;
+
+    const answer = isAssessmentActive ? assessmentAnswers[String(problem._id)] : null;
+    const restored = { ...(answer?.codeByLanguage || {}) };
+    if (answer?.language && answer.code !== undefined) restored[answer.language] = answer.code;
+    const templates = problem.starterCodeTemplates || problem.starterCode || {};
+    const languageKeys = isDebugging
+      ? Object.keys(templates)
+      : (problem.languages || []).map(({ key }) => key);
+    const restoredLocalDrafts = [];
+    languageKeys.forEach((key) => {
+      const template = templates[key] || '';
+      let localDraft = null;
+      try {
+        localDraft = localStorage.getItem(
+          draftKey(studentId, isAssessmentActive ? assessmentSessionId : null, problem._id, key, isDebugging)
+        );
+      } catch { /* private mode or unavailable storage */ }
+
+      if (localDraft !== null) {
+        const savedCode = restored[key];
+        restored[key] = localDraft;
+        if (!isStarterCode(localDraft, template) || savedCode !== undefined) {
+          restoredLocalDrafts.push([key, localDraft]);
+        }
+        return;
+      }
+      if (restored[key] !== undefined) return;
+      restored[key] = readDraftForLanguage(key, template, problem._id);
     });
-  }, [problem, language, readDraftForLanguage]);
+    setCodeByLanguage(restored);
+    if (isAssessmentActive) {
+      restoredLocalDrafts.forEach(([key, sourceCode]) => {
+        recordAssessmentDraft(problem._id, problem.slug, key, sourceCode);
+      });
+      if (restoredLocalDrafts.some(([key]) => key === language)) {
+        recordAssessmentAnswer(problem._id, problem.slug, language, restored[language]);
+      }
+    }
+  }, [
+    problem,
+    slug,
+    studentId,
+    assessmentSessionId,
+    isAssessmentActive,
+    assessmentAnswers,
+    isDebugging,
+    readDraftForLanguage,
+    language,
+    recordAssessmentAnswer,
+    recordAssessmentDraft,
+  ]);
 
   // ─── Load the problem ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -217,6 +319,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     setLoading(true);
     setLoadError('');
     setProblem(null);
+    setLoadedStudentId(null);
     setServerSavedAnswer(null);
     setCodeByLanguage({});
     setRunResult(null);
@@ -239,19 +342,12 @@ const CodingProblemPage = ({ isDebugging = false }) => {
           }
           : data.data;
         setProblem(loaded);
+        setLoadedStudentId(studentId);
         setProblemLocked((loaded.totalAttempts || 0) > 0);
 
-        // Replace an unchanged generic-template draft from older sessions with
-        // the problem-specific starter code; keep any student-edited draft.
-        const restored = {};
         const templates = loaded.starterCodeTemplates || loaded.starterCode || {};
-        (isDebugging ? [{ key: 'python' }] : loaded.languages || []).forEach((l) => {
-          const template = templates[l.key] || '';
-          restored[l.key] = readDraftForLanguage(l.key, template);
-        });
-        setCodeByLanguage(restored);
         setLanguage((current) => {
-          if (current && restored[current] !== undefined) return current;
+          if (current && templates[current] !== undefined) return current;
           return 'python';
         });
       })
@@ -262,7 +358,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [slug, isDebugging]);
+  }, [slug, isDebugging, studentId]);
 
   useEffect(() => {
     if ((!isAssessmentSubmitted && (isAssessmentActive || !problemLocked)) || !problem || problem.slug !== slug) {
@@ -291,15 +387,32 @@ const CodingProblemPage = ({ isDebugging = false }) => {
   useEffect(() => {
     if (!problem || problem.slug !== slug || isAssessmentSubmitted || typeof code !== 'string') return undefined;
     const t = setTimeout(() => {
-      try { localStorage.setItem(draftKey(slug, language, isDebugging), code); } catch { /* quota / private mode */ }
+      try {
+        if (studentId) {
+          localStorage.setItem(
+            draftKey(studentId, isAssessmentActive ? assessmentSessionId : null, problem._id, language, isDebugging),
+            code
+          );
+        }
+      } catch { /* quota / private mode */ }
     }, 800);
     return () => clearTimeout(t);
-  }, [code, language, problem, slug, isDebugging, isAssessmentSubmitted]);
+  }, [code, language, problem, slug, isDebugging, isAssessmentSubmitted, studentId, isAssessmentActive, assessmentSessionId]);
 
   useEffect(() => {
-    if (!isAssessmentActive || !problem || problem.slug !== slug || typeof code !== 'string') return;
-    recordAssessmentAnswer(problem._id, problem.slug, language, code);
-  }, [isAssessmentActive, problem, slug, language, code, recordAssessmentAnswer]);
+    if (!isAssessmentActive || !assessmentSessionId || !problem || problem.slug !== slug || typeof code !== 'string') return undefined;
+    const timer = setTimeout(() => {
+      api.put(`/${isDebugging ? 'debugging' : 'coding'}/assessment/draft`, {
+        sessionId: assessmentSessionId,
+        problemId: problem._id,
+        language,
+        sourceCode: code,
+      }).catch((error) => {
+        toast.error(error.response?.data?.message || 'Could not save this assessment draft.');
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [isAssessmentActive, assessmentSessionId, problem, slug, code, language, isDebugging]);
 
   useEffect(() => {
     if (!isAssessmentSubmitted || !problem || problem.slug !== slug) return;
@@ -333,26 +446,42 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     setShowLanguageMenu(false);
     if (isAssessmentSubmitted) {
       const answer = assessmentAnswers[String(problem._id)];
+      let template = problem.starterCodeTemplates?.[nextLanguage]
+        || problem.starterCode?.[nextLanguage]
+        || '';
+      if (isDebugging && !template) {
+        try {
+          const { data } = await api.get(`/debugging/problems/${slug}`, { params: { language: nextLanguage } });
+          template = data.data.languageTemplates?.[nextLanguage] || '';
+          if (!template) throw new Error(`No ${nextLanguage} template was returned.`);
+          setProblem((current) => ({
+            ...current,
+            starterCode: { ...current.starterCode, [nextLanguage]: template },
+            starterCodeTemplates: { ...current.starterCodeTemplates, [nextLanguage]: template },
+          }));
+        } catch (err) {
+          toast.error(err.response?.data?.message || err.message || `Could not load the ${nextLanguage} template.`);
+          return;
+        }
+      }
       const savedCode = answer?.language === nextLanguage
         ? answer.code
         : answer?.codeByLanguage?.[nextLanguage]
-          || readDraftForLanguage(
-            nextLanguage,
-            problem.starterCodeTemplates?.[nextLanguage] || problem.starterCode?.[nextLanguage] || ''
-          );
+          || template;
       setCodeByLanguage((current) => ({ ...current, [nextLanguage]: savedCode }));
     } else if (isDebugging) {
       try {
         const { data } = await api.get(`/debugging/problems/${slug}`, { params: { language: nextLanguage } });
         const template = data.data.languageTemplates?.[nextLanguage];
         if (!template) throw new Error(`No ${nextLanguage} template was returned.`);
+        const savedCode = assessmentAnswers[String(problem._id)]?.codeByLanguage?.[nextLanguage]
+          || readDraftForLanguage(nextLanguage, template, problem._id);
         setProblem((current) => ({
           ...current,
           starterCode: { ...current.starterCode, [nextLanguage]: template },
           starterCodeTemplates: { ...current.starterCodeTemplates, [nextLanguage]: template },
         }));
-        setCodeByLanguage((current) => ({ ...current, [nextLanguage]: template }));
-        try { localStorage.removeItem(draftKey(slug, nextLanguage, true)); } catch { /* private mode */ }
+        setCodeByLanguage((current) => ({ ...current, [nextLanguage]: savedCode }));
       } catch (err) {
         toast.error(err.response?.data?.message || err.message || `Could not load the ${nextLanguage} template.`);
         return;
@@ -363,11 +492,12 @@ const CodingProblemPage = ({ isDebugging = false }) => {
             || problem?.starterCode?.[nextLanguage]
             || '';
           if (current[nextLanguage] !== undefined) return current;
-        return { ...current, [nextLanguage]: readDraftForLanguage(nextLanguage, template) };
+        return { ...current, [nextLanguage]: readDraftForLanguage(nextLanguage, template, problem._id) };
       });
     }
     setLanguage(nextLanguage);
-    try { localStorage.setItem(`syn-assessment-language:v1:${slug}`, nextLanguage); } catch { /* private mode */ }
+    runSeq.current += 1;
+    setRunning(false);
     setRunResult(null);
   };
 
@@ -403,13 +533,27 @@ const CodingProblemPage = ({ isDebugging = false }) => {
       });
       if (runSeq.current !== seq) return; // a newer run superseded this one
       setRunResult(data.data);
+      if (isAssessmentActive && data.data.fullAssessment) {
+        recordAssessmentEvaluation(problem._id, language, code, data.data);
+      }
     } catch (err) {
       if (runSeq.current !== seq) return;
       handleApiError(err, 'Execution failed.');
     } finally {
       if (runSeq.current === seq) setRunning(false);
     }
-  }, [problem, running, submissionLocked, code, language, handleApiError, isDebugging, isAssessmentActive, assessmentSessionId]);
+  }, [
+    problem,
+    running,
+    submissionLocked,
+    code,
+    language,
+    handleApiError,
+    isDebugging,
+    isAssessmentActive,
+    assessmentSessionId,
+    recordAssessmentEvaluation,
+  ]);
 
   const guardAction = useCallback(() => {
     if (starterUnmodified) {
@@ -498,7 +642,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
     return () => window.removeEventListener('keydown', onKey);
   }, [goToNeighbour]);
 
-  if (loading || !problem || problem.slug !== slug) {
+  if (loading || !problem || problem.slug !== slug || loadedStudentId !== studentId) {
     return <div className="coding-center coding-center-full"><InlineSpinner /></div>;
   }
 
@@ -746,7 +890,11 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               onClick={() => {
                 const starter = problem.starterCodeTemplates?.[language] || problem.starterCode?.[language] || '';
                 setCode(starter);
-                try { localStorage.removeItem(draftKey(slug, language, isDebugging)); } catch { /* ignore */ }
+                try {
+                  localStorage.removeItem(
+                    draftKey(studentId, isAssessmentActive ? assessmentSessionId : null, problem._id, language, isDebugging)
+                  );
+                } catch { /* ignore */ }
                 setRunResult(null);
                 toast.info('Editor reset to the starter code.');
               }}
@@ -789,10 +937,18 @@ const CodingProblemPage = ({ isDebugging = false }) => {
           <div className="coding-case-summary">
             {runResult ? (
               <span>
-                {runResult.cases?.filter((c) => c.passed).length ?? 0}/{runResult.cases?.length ?? 0} sample cases passed
+                {runResult.passedTests ?? runResult.passedCases ?? runResult.cases?.filter((testCase) => testCase.passed).length ?? 0}/
+                {runResult.fullAssessment
+                  ? runResult.totalTests ?? runResult.cases?.length ?? 0
+                  : runResult.cases?.length ?? 0}{' '}
+                {runResult.fullAssessment ? 'assessment tests passed' : 'sample cases passed'}
               </span>
             ) : (
-              <span className="coding-muted">Run sample cases to check your code.</span>
+              <span className="coding-muted">
+                {isAssessmentActive
+                  ? 'Run your code against all assessment test cases.'
+                  : 'Run sample cases to check your code.'}
+              </span>
             )}
           </div>
           <div className="coding-action-buttons">
@@ -801,7 +957,7 @@ const CodingProblemPage = ({ isDebugging = false }) => {
               className="btn-outline-techiz"
               onClick={handleRun}
               disabled={running || sandboxDown || submissionLocked}
-              title="Run against the sample cases (F9)"
+              title={`${isAssessmentActive ? 'Run against all assessment test cases' : 'Run against the sample cases'} (F9)`}
             >
               <FiPlay /> {running ? 'Running…' : 'Run Code'}
             </button>

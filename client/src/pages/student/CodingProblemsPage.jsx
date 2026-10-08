@@ -37,6 +37,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
+  const [retryingAssessmentStatus, setRetryingAssessmentStatus] = useState(false);
   const [startError, setStartError] = useState('');
   const {
     assessmentStarted,
@@ -44,7 +45,9 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
     assessmentSubmission,
     assessmentSubmitted,
     assessmentLoaded,
+    assessmentLoadError,
     startAssessment,
+    loadAssessment,
   } = useAssessmentSession();
 
   // Filters
@@ -96,6 +99,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
   // ─── Fullscreen ref ─────────────────────────────────────────────────────────
   // ─── Start handler ─────────────────────────────────────────────────────────
   const handleStartAssessment = async () => {
+    if (!assessmentLoaded || assessmentLoadError || assessmentSubmitted) return;
     setStarting(true);
     setStartError('');
     try {
@@ -122,6 +126,15 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
     }
   };
 
+  const handleRetryAssessmentStatus = async () => {
+    setRetryingAssessmentStatus(true);
+    try {
+      await loadAssessment(isDebugging ? 'debugging' : 'coding');
+    } finally {
+      setRetryingAssessmentStatus(false);
+    }
+  };
+
   useEffect(() => { fetchProblems(); }, [fetchProblems]);
 
   const visibleProblems = assessmentStarted && assessmentQuestions.length
@@ -137,7 +150,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
     return {
       solved,
       attempted,
-      points: visibleProblems.reduce((s, p) => s + (p.solved ? p.points || 0 : 0), 0),
+      points: visibleProblems.reduce((sum, problem) => sum + (problem.bestScore || 0), 0),
     };
   }, [visibleProblems]);
 
@@ -172,12 +185,20 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
 
         <div className="assessment-landing">
           <div className="assessment-lock-icon"><FiLock /></div>
-          <h2 className="assessment-landing-title">Ready to Begin?</h2>
+          <h2 className="assessment-landing-title">
+            {assessmentSubmitted
+              ? 'Assessment Complete'
+              : assessmentLoadError
+                ? 'Assessment Status Unavailable'
+                : 'Ready to Begin?'}
+          </h2>
           <p className="assessment-landing-desc">
             {assessmentSubmitted
               ? 'Your assessment has been submitted and is locked. You can reopen each question to review the saved code.'
-              : <>Click <strong>Start Assessment</strong> to reveal 8 coding questions.
-                Your answers are saved as one final submission when you finish.</>}
+              : assessmentLoadError
+                ? assessmentLoadError
+                : <>Click <strong>Start Assessment</strong> to reveal 8 coding questions.
+                  Your answers are saved as one final submission when you finish.</>}
           </p>
           <div className="assessment-info-grid">
             <div className="assessment-info-item">
@@ -193,25 +214,38 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
               <span className="assessment-info-text">Hidden test cases</span>
             </div>
           </div>
-          <button
-            id="start-assessment-btn"
-            type="button"
-            className="assessment-start-btn"
-            onClick={handleStartAssessment}
-            disabled={assessmentSubmitted || starting || loading || !assessmentLoaded}
-          >
-            {starting ? (
-              <><span className="assessment-btn-spinner" /> Loading Questions…</>
-            ) : loading ? (
-              <>Loading Questions…</>
-            ) : !assessmentLoaded ? (
-              <>Checking Assessment…</>
-            ) : assessmentSubmitted ? (
-              <>Assessment Submitted</>
-            ) : (
-              <><FiPlay /> Start Assessment</>
-            )}
-          </button>
+          {assessmentLoadError ? (
+            <button
+              type="button"
+              className="assessment-start-btn"
+              onClick={handleRetryAssessmentStatus}
+              disabled={retryingAssessmentStatus}
+            >
+              {retryingAssessmentStatus
+                ? <><span className="assessment-btn-spinner" /> Checking Status…</>
+                : 'Retry Status Check'}
+            </button>
+          ) : (
+            <button
+              id="start-assessment-btn"
+              type="button"
+              className="assessment-start-btn"
+              onClick={handleStartAssessment}
+              disabled={assessmentSubmitted || starting || loading || !assessmentLoaded}
+            >
+              {starting ? (
+                <><span className="assessment-btn-spinner" /> Loading Questions…</>
+              ) : loading ? (
+                <>Loading Questions…</>
+              ) : !assessmentLoaded ? (
+                <>Checking Assessment…</>
+              ) : assessmentSubmitted ? (
+                <>Assessment Submitted</>
+              ) : (
+                <><FiPlay /> Start Assessment</>
+              )}
+            </button>
+          )}
           {assessmentSubmitted && assessmentQuestions[0] && (
             <div className="assessment-completed-summary" role="status">
               <strong>Final score: {assessmentSubmission?.score || 0}/{assessmentSubmission?.maxScore || 0}</strong>

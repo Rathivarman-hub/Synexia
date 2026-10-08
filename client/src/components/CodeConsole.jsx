@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FiCheckCircle, FiXCircle, FiAlertTriangle, FiTerminal } from 'react-icons/fi';
 
 // ─── Status → presentation map ────────────────────────────────────────────────
@@ -33,6 +33,12 @@ const TONE_COLOR = {
  */
 const CodeConsole = ({ result, running, error, className = '' }) => {
   const [tab, setTab] = useState('output');
+
+  useEffect(() => {
+    if (!result) return;
+    const firstFailure = (result.cases || []).find((testCase) => !testCase.passed);
+    setTab(firstFailure?.error ? 'error' : 'output');
+  }, [result]);
 
   if (running) {
     return (
@@ -146,7 +152,9 @@ const CodeConsole = ({ result, running, error, className = '' }) => {
             <span className="code-console-body--placeholder">
               {tab === 'error'
                 ? (firstFailure.status === 'ok' ? 'No errors — your program ran to completion.' : 'No error message was reported.')
-                : 'Your program printed nothing.'}
+                : firstFailure.status && firstFailure.status !== 'ok'
+                  ? `No output was produced (${firstFailure.status}).`
+                  : 'Your program printed nothing.'}
             </span>
           )}      </div>
     </div>

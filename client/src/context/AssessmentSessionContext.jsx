@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FiAlertTriangle } from 'react-icons/fi';
 import api from '../api/axios';
-import { MONACO_LANGUAGE_BY_KEY } from '../lib/monacoLanguages';
+import { useAuth } from './AuthContext';
 import './AssessmentSessionContext.css';
 
 export const MAX_WARNINGS = 3;
@@ -10,10 +10,6 @@ export const ASSESSMENT_DURATION_SECONDS = 90 * 60;
 export const ASSESSMENT_QUESTION_COUNT = 8;
 
 const AssessmentSessionContext = createContext(null);
-const DRAFT_PREFIX = 'syn-coding-draft:v2:';
-const DEBUG_DRAFT_PREFIX = 'syn-debug-draft:v2:';
-const LANGUAGE_PREFIX = 'syn-assessment-language:v1:';
-
 const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
 
 const requestFullscreen = (element) => {
@@ -41,18 +37,25 @@ const sameTransition = (previous, type, now) => {
 export const AssessmentSessionProvider = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userId = user?._id || user?.id || null;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
   const [assessmentStarted, setAssessmentStarted] = useState(false);
   const [assessmentEnded, setAssessmentEnded] = useState(false);
   const [warningCount, setWarningCount] = useState(0);
   const [warningEvents, setWarningEvents] = useState([]);
   const [warningDialog, setWarningDialog] = useState(null);
+  const [fullscreenError, setFullscreenError] = useState('');
   const [assessmentQuestions, setAssessmentQuestions] = useState([]);
   const [assessmentType, setAssessmentType] = useState(null);
   const [assessmentSessionId, setAssessmentSessionId] = useState(null);
   const [assessmentAnswers, setAssessmentAnswers] = useState({});
+  const [assessmentResults, setAssessmentResults] = useState({});
   const [assessmentSubmission, setAssessmentSubmission] = useState(null);
   const [assessmentSubmitted, setAssessmentSubmitted] = useState(false);
   const [assessmentLoaded, setAssessmentLoaded] = useState(false);
+  const [assessmentLoadError, setAssessmentLoadError] = useState('');
   const [assessmentSubmitting, setAssessmentSubmitting] = useState(false);
   const [assessmentSubmitError, setAssessmentSubmitError] = useState('');
   const [startedAt, setStartedAt] = useState(null);
@@ -65,11 +68,109 @@ export const AssessmentSessionProvider = ({ children }) => {
   const finishInProgressRef = useRef(false);
   const warningWriteRef = useRef(Promise.resolve());
 
+  useEffect(() => {
+    activeRef.current = false;
+    endedRef.current = false;
+    finishInProgressRef.current = false;
+    warningCountRef.current = 0;
+    warningEventsRef.current = [];
+    warningWriteRef.current = Promise.resolve();
+    setAssessmentStarted(false);
+    setAssessmentEnded(false);
+    setWarningCount(0);
+    setWarningEvents([]);
+    setAssessmentQuestions([]);
+    setAssessmentType(null);
+    setAssessmentSessionId(null);
+    setAssessmentAnswers({});
+    setAssessmentResults({});
+    setAssessmentSubmission(null);
+    setAssessmentSubmitted(false);
+    setAssessmentLoaded(false);
+    setAssessmentLoadError('');
+    setAssessmentSubmitting(false);
+    setAssessmentSubmitError('');
+    setStartedAt(null);
+  }, [userId]);
+
   const recordAssessmentAnswer = useCallback((questionId, slug, language, code) => {
     if (endedRef.current || finishInProgressRef.current || !questionId || !slug || !language || typeof code !== 'string') return;
     setAssessmentAnswers((current) => ({
       ...current,
-      [questionId]: { questionId, slug, language, code },
+      [questionId]: {
+        ...current[questionId],
+        questionId,
+        slug,
+        language,
+        code,
+        codeByLanguage: {
+          ...(current[questionId]?.codeByLanguage || {}),
+          [language]: code,
+        },
+      },
+    }));
+    setAssessmentResults((current) => {
+      const result = current[questionId];
+      if (!result || result.language !== language || result.code === code) return current;
+      return {
+        ...current,
+        [questionId]: {
+          ...result,
+          status: 'not-evaluated',
+          accepted: false,
+          awardedPoints: 0,
+        },
+      };
+    });
+  }, []);
+
+  const recordAssessmentDraft = useCallback((questionId, slug, language, code) => {
+    if (endedRef.current || finishInProgressRef.current || !questionId || !slug || !language || typeof code !== 'string') return;
+    setAssessmentAnswers((current) => {
+      const previous = current[questionId] || {};
+      return {
+        ...current,
+        [questionId]: {
+          ...previous,
+          questionId,
+          slug,
+          language: previous.language || language,
+          code: previous.code ?? code,
+          codeByLanguage: {
+            ...(previous.codeByLanguage || {}),
+            [language]: code,
+          },
+        },
+      };
+    });
+    setAssessmentResults((current) => {
+      const result = current[questionId];
+      if (!result || result.language !== language || result.code === code) return current;
+      return {
+        ...current,
+        [questionId]: {
+          ...result,
+          status: 'not-evaluated',
+          accepted: false,
+          awardedPoints: 0,
+        },
+      };
+    });
+  }, []);
+
+  const recordAssessmentEvaluation = useCallback((questionId, language, code, result) => {
+    if (endedRef.current || finishInProgressRef.current || !questionId || !result?.fullAssessment) return;
+    setAssessmentResults((current) => ({
+      ...current,
+      [questionId]: {
+        language,
+        code,
+        status: result.status,
+        accepted: result.accepted === true,
+        passedTests: result.passedTests || 0,
+        totalTests: result.totalTests || 0,
+        awardedPoints: result.awardedPoints || 0,
+      },
     }));
   }, []);
 
@@ -87,41 +188,14 @@ export const AssessmentSessionProvider = ({ children }) => {
     const savedAnswers = { ...assessmentAnswers };
     const answers = assessmentQuestions.map((question) => {
       const saved = savedAnswers[String(question._id)];
-      let language = saved?.language || 'python';
-      let code = saved?.code;
-      if (code === undefined) {
-        const prefix = assessmentType === 'debugging' ? DEBUG_DRAFT_PREFIX : DRAFT_PREFIX;
-        let preferredLanguage = 'python';
-        try { preferredLanguage = localStorage.getItem(`${LANGUAGE_PREFIX}${question.slug}`) || preferredLanguage; } catch { /* private mode */ }
-        const languages = [preferredLanguage, ...Object.keys(MONACO_LANGUAGE_BY_KEY).filter((key) => key !== preferredLanguage)];
-        const availableLanguage = languages.find((key) => {
-          try {
-            return localStorage.getItem(`${prefix}${question.slug}:${key}`) !== null;
-          } catch {
-            return false;
-          }
-        });
-        language = availableLanguage || 'python';
-        try {
-          code = localStorage.getItem(`${prefix}${question.slug}:${language}`) || '';
-        } catch {
-          code = '';
-        }
-      }
-      const codeByLanguage = {};
-      const prefix = assessmentType === 'debugging' ? DEBUG_DRAFT_PREFIX : DRAFT_PREFIX;
-      for (const languageKey of Object.keys(MONACO_LANGUAGE_BY_KEY)) {
-        try {
-          const draft = localStorage.getItem(`${prefix}${question.slug}:${languageKey}`);
-          if (draft !== null) codeByLanguage[languageKey] = draft;
-        } catch { /* private mode */ }
-      }
-      try {
-        const latestCode = localStorage.getItem(`${prefix}${question.slug}:${language}`);
-        if (latestCode !== null) code = latestCode;
-      } catch { /* private mode */ }
-      codeByLanguage[language] = code || '';
-      return { questionId: question._id, language, code: code || '', codeByLanguage };
+      const language = saved?.language || 'python';
+      const code = saved?.code || '';
+      return {
+        questionId: question._id,
+        language,
+        code,
+        codeByLanguage: saved?.codeByLanguage || { [language]: code },
+      };
     });
 
     let submission;
@@ -133,6 +207,7 @@ export const AssessmentSessionProvider = ({ children }) => {
         warningEvents: events,
         reason,
       });
+      if (userIdRef.current !== userId) return;
       submission = data.data;
     } catch (error) {
       finishInProgressRef.current = false;
@@ -159,6 +234,18 @@ export const AssessmentSessionProvider = ({ children }) => {
         codeByLanguage: answer.codeByLanguage || {},
       },
     ])));
+    setAssessmentResults(Object.fromEntries((submission.answers || []).map((answer) => [
+      String(answer.questionId),
+      {
+        language: answer.language,
+        code: answer.code,
+        status: answer.status,
+        accepted: answer.accepted === true,
+        passedTests: answer.passedTests || 0,
+        totalTests: answer.totalTests || 0,
+        awardedPoints: answer.awardedPoints || 0,
+      },
+    ])));
     setAssessmentEnded(true);
     setAssessmentStarted(false);
     setAssessmentSubmitting(false);
@@ -167,7 +254,7 @@ export const AssessmentSessionProvider = ({ children }) => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     setWarningDialog(null);
     navigate('/dashboard', { replace: true });
-  }, [assessmentAnswers, assessmentQuestions, assessmentSessionId, assessmentType, navigate]);
+  }, [assessmentAnswers, assessmentQuestions, assessmentSessionId, assessmentType, navigate, userId]);
 
   const recordWarning = useCallback((type) => {
     if (!activeRef.current || endedRef.current || finishInProgressRef.current || warningCountRef.current >= MAX_WARNINGS) return;
@@ -208,10 +295,14 @@ export const AssessmentSessionProvider = ({ children }) => {
   const startAssessment = useCallback(async (element, type) => {
     if (activeRef.current) return;
     if (!['coding', 'debugging'].includes(type)) throw new Error('Assessment type is required.');
+    const startingUserId = userId;
     await requestFullscreen(element || document.documentElement);
     let sessionData;
     try {
       const { data } = await api.post(`/${type}/assessment/start`);
+      if (userIdRef.current !== startingUserId) {
+        throw new Error('Your account changed while the assessment was starting. Please retry.');
+      }
       sessionData = data.data;
     } catch (error) {
       await exitFullscreen();
@@ -232,6 +323,7 @@ export const AssessmentSessionProvider = ({ children }) => {
     setAssessmentType(type);
     setAssessmentQuestions(sessionData.questions);
     setAssessmentAnswers({});
+    setAssessmentResults({});
     setAssessmentSubmission(null);
     setAssessmentSubmitted(false);
     setAssessmentSubmitError('');
@@ -245,102 +337,155 @@ export const AssessmentSessionProvider = ({ children }) => {
     setWarningDialog(null);
     setStartedAt(sessionStartedAt);
     return sessionData.questions;
-  }, []);
+  }, [userId]);
 
   const endAssessment = useCallback(
     (reason = 'manual-submit') => finishAssessment(warningCountRef.current, warningEventsRef.current, null, reason),
     [finishAssessment]
   );
 
-  const loadAssessment = useCallback(async (type) => {
-    const { data } = await api.get(`/${type}/assessment/me`);
+  const loadAssessment = useCallback(async (type, expectedUserId = userId) => {
     if (activeRef.current) return;
-    setAssessmentType(type);
-    if (data.data.submitted) {
-      const submission = data.data.submission;
-      activeRef.current = false;
-      endedRef.current = true;
-      warningCountRef.current = submission.warningCount || 0;
-      warningEventsRef.current = submission.warningEvents || [];
-      setWarningCount(warningCountRef.current);
-      setWarningEvents(warningEventsRef.current);
-      setAssessmentSubmitError('');
-      setAssessmentSubmission(submission);
-      setAssessmentSubmitted(true);
-      setAssessmentStarted(false);
-      setAssessmentEnded(true);
-      setAssessmentSessionId(String(submission.sessionId));
-      setAssessmentQuestions(submission.answers.map((answer) => ({
-        _id: String(answer.questionId),
-        title: answer.title,
-        slug: answer.slug,
-      })));
-      setAssessmentAnswers(Object.fromEntries(submission.answers.map((answer) => [
-        String(answer.questionId),
-        {
-          questionId: String(answer.questionId),
+    setAssessmentLoadError('');
+    setAssessmentLoaded(false);
+    try {
+      const { data } = await api.get(`/${type}/assessment/me`);
+      if (userIdRef.current !== expectedUserId) return;
+      setAssessmentType(type);
+      if (data.data.submitted) {
+        const submission = data.data.submission;
+        activeRef.current = false;
+        endedRef.current = true;
+        warningCountRef.current = submission.warningCount || 0;
+        warningEventsRef.current = submission.warningEvents || [];
+        setWarningCount(warningCountRef.current);
+        setWarningEvents(warningEventsRef.current);
+        setAssessmentSubmitError('');
+        setAssessmentSubmission(submission);
+        setAssessmentSubmitted(true);
+        setAssessmentStarted(false);
+        setAssessmentEnded(true);
+        setAssessmentSessionId(String(submission.sessionId));
+        setAssessmentQuestions(submission.answers.map((answer) => ({
+          _id: String(answer.questionId),
+          title: answer.title,
           slug: answer.slug,
-          language: answer.language,
-          code: answer.code,
-          codeByLanguage: answer.codeByLanguage || {},
-        },
-      ])));
+        })));
+        setAssessmentAnswers(Object.fromEntries(submission.answers.map((answer) => [
+          String(answer.questionId),
+          {
+            questionId: String(answer.questionId),
+            slug: answer.slug,
+            language: answer.language,
+            code: answer.code,
+            codeByLanguage: answer.codeByLanguage || {},
+          },
+        ])));
+        setAssessmentResults(Object.fromEntries(submission.answers.map((answer) => [
+          String(answer.questionId),
+          {
+            language: answer.language,
+            code: answer.code,
+            status: answer.status,
+            accepted: answer.accepted === true,
+            passedTests: answer.passedTests || 0,
+            totalTests: answer.totalTests || 0,
+            awardedPoints: answer.awardedPoints || 0,
+          },
+        ])));
+        setAssessmentLoaded(true);
+        return;
+      }
+      setAssessmentSubmitted(false);
+      setAssessmentSubmission(null);
+      endedRef.current = false;
+      if (data.data.session) {
+        const session = data.data.session;
+        const sessionStartedAt = new Date(session.startedAt).getTime();
+        activeRef.current = true;
+        finishInProgressRef.current = false;
+        warningWriteRef.current = Promise.resolve();
+        lastTransitionRef.current = null;
+        warningCountRef.current = session.warningCount || 0;
+        warningEventsRef.current = session.warningEvents || [];
+        setAssessmentStarted(true);
+        setAssessmentEnded(false);
+        setWarningCount(warningCountRef.current);
+        setWarningEvents(warningEventsRef.current);
+        setStartedAt(sessionStartedAt);
+        setClockNow(Date.now());
+        setAssessmentSessionId(String(data.data.session._id));
+        setAssessmentQuestions(session.questions);
+        setAssessmentAnswers((session.drafts || []).reduce((answers, draft) => {
+          const questionId = String(draft.questionId || draft.problemId);
+          const code = draft.sourceCode ?? draft.code ?? '';
+          const previous = answers[questionId];
+          answers[questionId] = {
+            ...previous,
+            questionId,
+            slug: session.questions.find((question) => String(question._id) === questionId)?.slug,
+            language: !previous || new Date(draft.lastSavedAt || 0) >= new Date(previous.lastSavedAt || 0)
+              ? draft.language
+              : previous.language,
+            code: !previous || new Date(draft.lastSavedAt || 0) >= new Date(previous.lastSavedAt || 0)
+              ? code
+              : previous.code,
+            lastSavedAt: draft.lastSavedAt,
+            codeByLanguage: {
+              ...(previous?.codeByLanguage || {}),
+              [draft.language]: code,
+            },
+          };
+          return answers;
+        }, {}));
+        setAssessmentResults(Object.fromEntries((session.evaluations || []).map((result) => [
+          String(result.questionId),
+          result,
+        ])));
+      } else {
+        activeRef.current = false;
+        warningCountRef.current = 0;
+        warningEventsRef.current = [];
+        setWarningCount(0);
+        setWarningEvents([]);
+        setAssessmentSessionId(null);
+        setAssessmentQuestions([]);
+        setAssessmentAnswers({});
+        setAssessmentResults({});
+        setStartedAt(null);
+      }
       setAssessmentLoaded(true);
-      return;
+    } catch (error) {
+      if (userIdRef.current === expectedUserId) {
+        console.error('Could not load the saved assessment:', error);
+        setAssessmentLoadError(error.response?.data?.message || 'Assessment status could not be loaded. Retry before starting.');
+        setAssessmentLoaded(true);
+      }
     }
-    setAssessmentSubmitted(false);
-    setAssessmentSubmission(null);
-    endedRef.current = false;
-    if (data.data.session) {
-      const session = data.data.session;
-      const sessionStartedAt = new Date(session.startedAt).getTime();
-      activeRef.current = true;
-      finishInProgressRef.current = false;
-      warningWriteRef.current = Promise.resolve();
-      lastTransitionRef.current = null;
-      warningCountRef.current = session.warningCount || 0;
-      warningEventsRef.current = session.warningEvents || [];
-      setAssessmentStarted(true);
-      setAssessmentEnded(false);
-      setWarningCount(warningCountRef.current);
-      setWarningEvents(warningEventsRef.current);
-      setStartedAt(sessionStartedAt);
-      setClockNow(Date.now());
-      setAssessmentSessionId(String(data.data.session._id));
-      setAssessmentQuestions(session.questions);
-    } else {
-      activeRef.current = false;
-      warningCountRef.current = 0;
-      warningEventsRef.current = [];
-      setWarningCount(0);
-      setWarningEvents([]);
-      setAssessmentSessionId(null);
-      setAssessmentQuestions([]);
-      setAssessmentAnswers({});
-      setStartedAt(null);
-    }
-    setAssessmentLoaded(true);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     const match = location.pathname.match(/^\/(coding|debugging)\/problems(?:\/|$)/);
-    if (!match || activeRef.current) return undefined;
+    if (!match || activeRef.current || !userId) return undefined;
     let cancelled = false;
     setAssessmentLoaded(false);
-    loadAssessment(match[1])
+    loadAssessment(match[1], userId)
       .catch((error) => {
-        if (!cancelled) {
-          console.error('Could not load the saved assessment:', error);
-          setAssessmentLoaded(true);
-        }
+        if (!cancelled) console.error('Could not load the saved assessment:', error);
       });
     return () => { cancelled = true; };
-  }, [loadAssessment, location.pathname]);
+  }, [loadAssessment, location.pathname, userId]);
 
   const continueAfterWarning = useCallback(async () => {
     if (endedRef.current) return;
-    setWarningDialog(null);
-    await requestFullscreen(fullscreenElement() || document.documentElement);
+    setFullscreenError('');
+    try {
+      await requestFullscreen(fullscreenElement() || document.documentElement);
+      setWarningDialog(null);
+    } catch (error) {
+      console.error('Could not restore fullscreen mode:', error);
+      setFullscreenError('Fullscreen could not be restored. Allow fullscreen in your browser, then try again.');
+    }
   }, []);
 
   useEffect(() => {
@@ -421,9 +566,11 @@ export const AssessmentSessionProvider = ({ children }) => {
     assessmentType,
     assessmentSessionId,
     assessmentAnswers,
+    assessmentResults,
     assessmentSubmission,
     assessmentSubmitted,
     assessmentLoaded,
+    assessmentLoadError,
     assessmentSubmitting,
     assessmentSubmitError,
     maxWarnings: MAX_WARNINGS,
@@ -431,6 +578,8 @@ export const AssessmentSessionProvider = ({ children }) => {
     endAssessment,
     continueAfterWarning,
     recordAssessmentAnswer,
+    recordAssessmentDraft,
+    recordAssessmentEvaluation,
     loadAssessment,
   };
 
@@ -459,6 +608,9 @@ export const AssessmentSessionProvider = ({ children }) => {
                     : `Warning limit reached (${warningDialog.count}/${MAX_WARNINGS}). Returning to the student dashboard.`
                 : `A fullscreen or focus violation was detected. Warning ${warningDialog.count} of ${MAX_WARNINGS}.`}
             </p>
+            {!warningDialog.final && fullscreenError && (
+              <p role="alert" className="assessment-warning-error">{fullscreenError}</p>
+            )}
             {!warningDialog.final && (
               <button type="button" className="assessment-warning-primary" onClick={continueAfterWarning} autoFocus>
                 Return to assessment

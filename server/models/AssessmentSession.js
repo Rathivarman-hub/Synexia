@@ -26,6 +26,17 @@ const assessmentSessionSchema = new mongoose.Schema(
       }],
       default: [],
     },
+    drafts: {
+      type: [{
+        _id: false,
+        problemId: { type: mongoose.Schema.Types.ObjectId, required: true },
+        questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
+        language: { type: String, enum: LANGUAGE_KEYS, required: true },
+        sourceCode: { type: String, maxlength: 20000, required: true },
+        lastSavedAt: { type: Date, required: true },
+      }],
+      default: [],
+    },
     evaluations: {
       type: [{
         _id: false,

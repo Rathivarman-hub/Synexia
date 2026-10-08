@@ -440,12 +440,14 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
   }
 
   const finalAssessmentRows = assessmentSubmissions.map((submission) => {
-    const questionResults = submission.answers.map((answer) => {
+    const questionResults = submission.answers.map((answer, index) => {
       const passedTests = answer.passedTests ?? answer.passedCases ?? 0;
       const totalTests = answer.totalTests ?? answer.totalCases ?? 0;
       const accepted = answer.status === 'accepted' && totalTests > 0 && passedTests === totalTests;
       return {
-        title: answer.title,
+        questionNumber: index + 1,
+        attempted: answer.status !== 'not-attempted',
+        language: answer.language,
         status: accepted ? 'accepted' : answer.status === 'accepted' ? 'wrong-answer' : answer.status,
         passedTests,
         totalTests,

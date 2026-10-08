@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { FiCheck, FiCircle, FiTarget, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { getDifficultyMeta } from './DifficultyBadge';
@@ -31,7 +31,13 @@ const ProblemNavigator = ({
   isDebugging = false,
 }) => {
   const { slug: currentSlug } = useParams();
-  const { assessmentQuestions } = useAssessmentSession();
+  const {
+    assessmentQuestions,
+    assessmentAnswers,
+    assessmentResults,
+    isAssessmentActive,
+    isAssessmentSubmitted,
+  } = useAssessmentSession();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,10 +73,30 @@ const ProblemNavigator = ({
     };
   }, [assessmentQuestions, isDebugging]);
 
-  // Publish the ordering to the parent for previous/next navigation.
+  const assessmentView = isAssessmentActive || isAssessmentSubmitted;
+  const displayRows = useMemo(() => (assessmentView
+    ? rows.map((problem) => {
+      const question = assessmentQuestions.find((item) => item.slug === problem.slug);
+      const questionId = String(question?._id || '');
+      const result = assessmentResults[questionId];
+      const answer = assessmentAnswers[questionId];
+      const accepted = result?.accepted === true && result.status === 'accepted';
+      const attempted = !accepted && (
+        (result && result.status !== 'not-attempted')
+        || Boolean(answer?.code?.trim())
+      );
+      return {
+        ...problem,
+        status: accepted ? 'solved' : attempted ? 'attempted' : 'none',
+        solved: accepted,
+        bestScore: accepted ? result.awardedPoints || 0 : 0,
+      };
+    })
+    : rows), [assessmentView, rows, assessmentQuestions, assessmentResults, assessmentAnswers]);
+
   useEffect(() => {
-    onCatalogLoaded?.(rows);
-  }, [rows, onCatalogLoaded]);
+    onCatalogLoaded?.(displayRows);
+  }, [displayRows, onCatalogLoaded]);
 
   // WHY a modifier comparison instead of measuring scrollTop: with 8 problems the
   // rail rarely scrolls, and reading scrollTop would need a scroll listener plus a
@@ -82,9 +108,9 @@ const ProblemNavigator = ({
     return 'is-todo';
   };
 
-  const solvedCount = rows.filter((r) => r.status === 'solved').length;
-  const attemptedCount = rows.filter((r) => r.status === 'attempted').length;
-  const total = rows.length;
+  const solvedCount = displayRows.filter((r) => r.status === 'solved').length;
+  const attemptedCount = displayRows.filter((r) => r.status === 'attempted').length;
+  const total = displayRows.length;
   const pct = total > 0 ? Math.round((solvedCount / total) * 100) : 0;
 
   // Track the active row into view when navigating with the arrow keys.
@@ -120,7 +146,7 @@ const ProblemNavigator = ({
             <div className="pn-progress-fill" style={{ width: `${pct}%` }} />
           </div>
           <span className="pn-progress-label">
-            <strong>{solvedCount}</strong> of {total} solved
+            <strong>{solvedCount}</strong> of {total} {assessmentView ? 'accepted' : 'solved'}
           </span>
         </div>
 
@@ -142,7 +168,7 @@ const ProblemNavigator = ({
         )}
 
         {!loading &&
-          rows.map((r, i) => {
+          displayRows.map((r, i) => {
             const meta = getDifficultyMeta(r.difficulty);
             return (
               <li key={r._id}>
@@ -153,7 +179,7 @@ const ProblemNavigator = ({
                   aria-current={r.slug === currentSlug ? 'page' : undefined}
                 >
                   <span className="pn-num">
-                    {r.status === 'solved' ? <FiCheck aria-label="Solved" /> : r.status === 'attempted' ? <FiTarget aria-label="Attempted" /> : i + 1}
+                    {r.status === 'solved' ? <FiCheck aria-label={assessmentView ? 'Accepted' : 'Solved'} /> : r.status === 'attempted' ? <FiTarget aria-label="Attempted" /> : i + 1}
                   </span>
                   <span className="pn-item-body">
                     <span className="pn-item-title">{r.title}</span>
@@ -171,7 +197,7 @@ const ProblemNavigator = ({
       </ol>
 
       <div className="pn-legend">
-        <span><FiCheck /> Solved</span>
+        <span><FiCheck /> {assessmentView ? 'Accepted' : 'Solved'}</span>
         <span><FiTarget /> Attempted</span>
         <span><FiCircle /> Not started</span>
       </div>

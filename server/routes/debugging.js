@@ -12,9 +12,13 @@ import {
   createDebuggingProblemSchema, updateDebuggingProblemSchema,
   runDebuggingCodeSchema, submitDebuggingCodeSchema, listDebuggingProblemsQuerySchema,
 } from '../validators/debuggingValidators.js';
-import { recordAssessmentWarningSchema, submitAssessmentSchema } from '../validators/assessmentValidators.js';
 import {
-  getMyAssessment, getMySavedAnswer, recordAssessmentWarning, startAssessment, submitAssessment,
+  recordAssessmentWarningSchema,
+  saveAssessmentDraftSchema,
+  submitAssessmentSchema,
+} from '../validators/assessmentValidators.js';
+import {
+  getMyAssessment, getMySavedAnswer, recordAssessmentWarning, saveAssessmentDraft, startAssessment, submitAssessment,
 } from '../controllers/assessmentController.js';
 
 const router = express.Router();
@@ -42,6 +46,7 @@ router.post('/run', protect, codeLimiter, validate(runDebuggingCodeSchema), runD
 router.post('/submit', protect, codeLimiter, validate(submitDebuggingCodeSchema), submitDebuggingCode);
 router.post('/assessment/start', protect, startAssessment('debugging'));
 router.get('/assessment/me', protect, getMyAssessment('debugging'));
+router.put('/assessment/draft', protect, validate(saveAssessmentDraftSchema), saveAssessmentDraft('debugging'));
 router.get('/problems/:slug/saved-answer', protect, getMySavedAnswer('debugging'));
 router.post('/assessment/warning', protect, validate(recordAssessmentWarningSchema), recordAssessmentWarning('debugging'));
 router.post('/assessment/submit', protect, codeLimiter, validate(submitAssessmentSchema), submitAssessment('debugging'));

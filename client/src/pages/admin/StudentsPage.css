@@ -30,6 +30,17 @@
   opacity: 0.8;
 }
 
+.stu-actions-heading,
+.stu-actions-cell {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap;
+}
+
+.stu-actions-cell .admin-icon-button {
+  flex: 0 0 34px;
+}
+
 .stu-sub-table {
   width: 100%;
   font-size: 0.9rem;

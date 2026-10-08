@@ -15,9 +15,9 @@ import {
 import { runCodeSchema, submitCodeSchema } from '../validators/codingValidators.js';
 import { submitAssessmentSchema } from '../validators/assessmentValidators.js';
 import {
-  getMyAssessment, getMySavedAnswer, recordAssessmentWarning, startAssessment, submitAssessment,
+  getMyAssessment, getMySavedAnswer, recordAssessmentWarning, saveAssessmentDraft, startAssessment, submitAssessment,
 } from '../controllers/assessmentController.js';
-import { recordAssessmentWarningSchema } from '../validators/assessmentValidators.js';
+import { recordAssessmentWarningSchema, saveAssessmentDraftSchema } from '../validators/assessmentValidators.js';
 
 // ─── Public catalogue (any authenticated user) ────────────────────────────────
 router.get('/problems', protect, getProblems);
@@ -33,6 +33,7 @@ router.post('/run', protect, codeLimiter, validate(runCodeSchema), runCode);
 router.post('/submit', protect, codeLimiter, validate(submitCodeSchema), submitCode);
 router.post('/assessment/start', protect, startAssessment('coding'));
 router.get('/assessment/me', protect, getMyAssessment('coding'));
+router.put('/assessment/draft', protect, validate(saveAssessmentDraftSchema), saveAssessmentDraft('coding'));
 router.get('/problems/:slug/saved-answer', protect, getMySavedAnswer('coding'));
 router.post('/assessment/warning', protect, validate(recordAssessmentWarningSchema), recordAssessmentWarning('coding'));
 router.post('/assessment/submit', protect, codeLimiter, validate(submitAssessmentSchema), submitAssessment('coding'));
@@ -44,8 +45,8 @@ router.get('/stats/me', protect, getMyCodingStats);
 router.get('/stats/me/problems', protect, getMyProblemProgress);
 router.get('/execution-status', protect, getExecutionStatusRoute);
 
-router.get('/leaderboard', protect, getCodingBoard);
-router.get('/leaderboard/me', protect, getMyCodingRank);
+router.get('/leaderboard', protect, adminOnly, getCodingBoard);
+router.get('/leaderboard/me', protect, adminOnly, getMyCodingRank);
 
 // ─── Admin leaderboard reporting ──────────────────────────────────────────────
 router.get('/admin/students/:studentId', protect, adminOnly, getStudentCodingReport);

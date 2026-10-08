@@ -18,6 +18,13 @@ export const recordAssessmentWarningSchema = Joi.object({
   event: warningEventSchema.required(),
 });
 
+export const saveAssessmentDraftSchema = Joi.object({
+  sessionId: Joi.string().hex().length(24).required(),
+  problemId: Joi.string().hex().length(24).required(),
+  language: Joi.string().valid(...LANGUAGE_KEYS).required(),
+  sourceCode: Joi.string().max(20000).allow('').required(),
+});
+
 export const submitAssessmentSchema = Joi.object({
   sessionId: Joi.string().hex().length(24).required(),
   answers: Joi.array().items(Joi.object({

@@ -3,17 +3,45 @@ import { RedisStore } from 'rate-limit-redis';
 import { getRedisClient, isRedisConnected } from '../config/redis.js';
 import logger from '../config/logger.js';
 
+export const createRedisRateLimitStore = (prefix, clientProvider = getRedisClient) => new RedisStore({
+  sendCommand: async (...args) => {
+    const client = clientProvider();
+    if (!client || client.status !== 'ready') {
+      const error = new Error('Redis rate-limit store is unavailable.');
+      logger.warn(`Redis code rate-limit command failed: ${error.message}`);
+      throw error;
+    }
+    try {
+      return await client.call(...args);
+    } catch (error) {
+      logger.warn(`Redis code rate-limit command failed: ${error.message}`);
+      throw error;
+    }
+  },
+  prefix,
+});
+
 /**
  * Build a rate limiter, using Redis store if available (shared across PM2 workers),
  * falling back to in-memory store in dev or when Redis is unavailable.
  */
-const buildLimiter = ({ windowMs, max, message, prefix, skipSuccessfulRequests = false, keyGenerator, useRedis = isRedisConnected() }) => {
+const buildLimiter = ({
+  windowMs,
+  max,
+  message,
+  prefix,
+  skipSuccessfulRequests = false,
+  keyGenerator,
+  useRedis = isRedisConnected(),
+  passOnStoreError = false,
+}) => {
   const options = {
     windowMs,
     max,
     standardHeaders: true,  // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false,
     skipSuccessfulRequests,
+    passOnStoreError,
     // WHY: caller-supplied keyGenerator wins, otherwise default to the IP.
     // Express-rate-limit v8 requires ipKeyGenerator() for any custom IPv6-aware
     // key function, which is why callers compose it rather than raw req.ip.
@@ -27,11 +55,8 @@ const buildLimiter = ({ windowMs, max, message, prefix, skipSuccessfulRequests =
     },
   };
 
-  if (useRedis && isRedisConnected()) {
-    options.store = new RedisStore({
-      sendCommand: (...args) => getRedisClient().call(...args),
-      prefix,
-    });
+  if (useRedis && getRedisClient()) {
+    options.store = createRedisRateLimitStore(prefix);
   }
 
   return rateLimit(options);
@@ -85,14 +110,23 @@ const createCodeLimiter = (useRedis) => buildLimiter({
   // Key on userId to avoid locking out everyone behind a shared campus NAT.
   keyGenerator: (req) => req.user?._id || ipKeyGenerator(req.ip || 'unknown'),
   useRedis,
+  // Keep Run Code available during Redis outages; codeLimiter switches traffic
+  // to its local store until Redis is ready again.
+  passOnStoreError: useRedis,
 });
 
-let codeLimiterInstance = createCodeLimiter(false);
+const memoryCodeLimiter = createCodeLimiter(false);
+let redisCodeLimiter = null;
 
 export const initializeCodeLimiter = () => {
-  if (isRedisConnected()) {
-    codeLimiterInstance = createCodeLimiter(true);
+  if (getRedisClient()) {
+    redisCodeLimiter = createCodeLimiter(true);
   }
 };
 
-export const codeLimiter = (req, res, next) => codeLimiterInstance(req, res, next);
+export const codeLimiter = (req, res, next) => {
+  const limiter = isRedisConnected() && redisCodeLimiter
+    ? redisCodeLimiter
+    : memoryCodeLimiter;
+  return limiter(req, res, next);
+};

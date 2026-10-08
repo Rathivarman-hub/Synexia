@@ -215,15 +215,14 @@ const StudentsPage = () => {
                       />
                     </th>
                     <th className="th-center" style={{ width: '3%' }}>#</th>
-                    <th className="th-left" style={{ width: '12%' }}>Name</th>
+                    <th className="th-left" style={{ width: '13%' }}>Name</th>
                     <th className="th-left" style={{ width: '17%' }}>Email</th>
-                    <th className="th-left" style={{ width: '12%' }}>College</th>
-                    <th className="th-center" style={{ width: '7%' }}>Roll No.</th>
+                    <th className="th-left" style={{ width: '13%' }}>College</th>
+                    <th className="th-left" style={{ width: '11%' }}>Team Head Mobile</th>
                     <th className="th-center" style={{ width: '10%' }}>Questions Passed</th>
                     <th className="th-center" style={{ width: '8%' }}>Submissions</th>
-                    <th className="th-center" style={{ width: '9%' }}>Best Score %</th>
-                    <th className="th-center" style={{ width: '8%' }}>Joined</th>
-                    <th className="th-right" style={{ width: '6%' }}>Actions</th>
+                    <th className="th-center" style={{ width: '9%' }}>Best Score</th>
+                    <th className="th-center stu-actions-heading" style={{ width: '8%' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -252,12 +251,18 @@ const StudentsPage = () => {
                           <td className="td-left" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: 170 }}>
                             <span style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>{s.college || '—'}</span>
                           </td>
-                          <td className="td-center" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{s.rollNumber || '—'}</td>
+                          <td className="td-left" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: 150 }}>
+                            <span
+                              title={s.teamHeadMobileNumber || 'No mobile number provided'}
+                              style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle' }}
+                            >
+                              {s.teamHeadMobileNumber || '—'}
+                            </span>
+                          </td>
                           <td className="td-center" style={{ fontWeight: 700, color: solved > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>{solved}</td>
                           <td className="td-center" style={{ color: 'var(--text-muted)' }}>{attempts}</td>
                           <td className="td-center" style={{ fontWeight: 600, color: 'var(--secondary)' }}>{Math.round(Number(stats.bestScore ?? 0))}%</td>
-                          <td className="td-center" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{new Date(s.createdAt).toLocaleDateString('en-IN')}</td>
-                          <td className="td-right">
+                          <td className="td-center stu-actions-cell">
                             <button
                               className="admin-icon-button"
                               onClick={() => handleExpandStudent(s._id)}
@@ -271,7 +276,7 @@ const StudentsPage = () => {
 
                         {expandedStudent === s._id && (
                           <tr className="stu-drilldown">
-                            <td colSpan={11} style={{ padding: 16 }}>
+                            <td colSpan={10} style={{ padding: 16 }}>
                               {loadingSubs[s._id] ? (
                                 <div className="stu-drilldown-empty">Loading submissions…</div>
                               ) : !submissions[s._id]?.length ? (
@@ -284,10 +289,8 @@ const StudentsPage = () => {
                                       <th>Language</th>
                                       <th>Verdict</th>
                                       <th>Cases</th>
-                                      <th>Score</th>
                                       <th>Activity</th>
                                       <th>Warnings</th>
-                                      <th>Time</th>
                                       <th>Submitted</th>
                                     </tr>
                                   </thead>
@@ -309,8 +312,12 @@ const StudentsPage = () => {
                                                     {(sub.questionResults || []).map((question, index) => {
                                                       const questionTone = toneFor(question.status);
                                                       return (
-                                                        <div key={`${question.title}-${index}`} style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                                          <strong style={{ color: 'var(--text-primary)' }}>{question.title}</strong>
+                                                        <div key={question.questionNumber || index + 1} style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                          <strong style={{ color: 'var(--text-primary)' }}>Question {question.questionNumber || index + 1}</strong>
+                                                          {' · '}
+                                                          {question.attempted ? 'Attempted' : 'Not attempted'}
+                                                          {' · '}
+                                                          {LANGUAGE_LABELS[question.language] || question.language || 'Language not recorded'}
                                                           {' · '}
                                                           <span style={{ color: questionTone.color }}>{questionTone.label}</span>
                                                           {' · '}
@@ -337,7 +344,6 @@ const StudentsPage = () => {
                                             </span>
                                           </td>
                                           <td style={{ color: 'var(--text-muted)' }}>{sub.passedCases}/{sub.totalCases}</td>
-                                          <td style={{ fontWeight: 600 }}>{sub.score}{sub.maxScore ? `/${sub.maxScore}` : ''}</td>
                                           <td>
                                             {sub.activityType
                                               ? sub.activityType
@@ -360,7 +366,6 @@ const StudentsPage = () => {
                                               </details>
                                             )}
                                           </td>
-                                          <td style={{ color: 'var(--text-muted)' }}>{sub.executionTime ? `${sub.executionTime} ms` : '—'}</td>
                                           <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                                             {new Date(sub.submittedAt).toLocaleString('en-IN')}
                                           </td>

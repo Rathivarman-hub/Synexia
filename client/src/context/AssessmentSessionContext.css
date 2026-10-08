@@ -46,6 +46,12 @@
   line-height: 1.6;
 }
 
+.assessment-warning-backdrop .assessment-warning-modal p.assessment-warning-error {
+  margin-top: 10px;
+  color: #B42318 !important;
+  font-weight: 600;
+}
+
 .assessment-warning-primary {
   min-height: 38px;
   margin-top: 24px;

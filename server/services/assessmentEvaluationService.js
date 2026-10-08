@@ -84,6 +84,13 @@ export const evaluateAssessmentAnswer = async ({
     }, problem.points),
     evaluatedAt: new Date(),
   };
+  const draft = {
+    problemId: problem._id,
+    questionId: problem._id,
+    language,
+    sourceCode: code,
+    lastSavedAt: evaluation.evaluatedAt,
+  };
 
   const update = await AssessmentSession.updateOne(
     { ...sessionFilter, status: 'in-progress' },
@@ -99,6 +106,25 @@ export const evaluateAssessmentAnswer = async ({
               },
             },
             [{ $literal: evaluation }],
+          ],
+        },
+        drafts: {
+          $concatArrays: [
+            {
+              $filter: {
+                input: { $ifNull: ['$drafts', []] },
+                as: 'draft',
+                cond: {
+                  $not: [{
+                    $and: [
+                      { $eq: ['$$draft.questionId', problem._id] },
+                      { $eq: ['$$draft.language', language] },
+                    ],
+                  }],
+                },
+              },
+            },
+            [{ $literal: draft }],
           ],
         },
       },

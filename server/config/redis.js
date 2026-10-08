@@ -10,23 +10,17 @@ const createRedisClient = (redisUrl) => {
     enableReadyCheck: true,
     lazyConnect: true,
     retryStrategy: (times) => {
-      if (times > 1) {
-        logger.warn('Redis: max retries reached, giving up on reconnect');
-        return null;
+      const delay = Math.min(times * 500, 5000);
+      if (times <= 3 || times % 10 === 0) {
+        logger.warn(`Redis: reconnecting in ${delay}ms (attempt ${times})`);
       }
-      const delay = Math.min(times * 200, 2000);
-      logger.info(`Redis: reconnecting in ${delay}ms (attempt ${times})`);
       return delay;
     },
   });
 
-  redis.on('connect', () => {
-    isConnected = true;
-    logger.info('✅ Redis connected');
-  });
-
   redis.on('ready', () => {
     isConnected = true;
+    logger.info('✅ Redis connected');
   });
 
   redis.on('error', (err) => {
@@ -66,6 +60,6 @@ export const connectRedis = async () => {
 };
 
 export const getRedisClient = () => client;
-export const isRedisConnected = () => isConnected;
+export const isRedisConnected = () => isConnected && client?.status === 'ready';
 
 export default client;

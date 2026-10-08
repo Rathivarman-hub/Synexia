@@ -1,4 +1,5 @@
 import asyncHandler from 'express-async-handler';
+import mongoose from 'mongoose';
 import AssessmentSession from '../models/AssessmentSession.js';
 import AssessmentSubmission from '../models/AssessmentSubmission.js';
 import CodingSubmission from '../models/CodingSubmission.js';
@@ -90,15 +91,69 @@ const orderedQuestions = async (type) => {
   return questions;
 };
 
-const publicSession = (session, questions) => ({
-  _id: session._id,
-  assessmentType: session.assessmentType,
-  startedAt: session.startedAt,
-  expiresAt: session.expiresAt,
-  warningCount: session.warningCount || 0,
-  warningEvents: session.warningEvents || [],
-  questions: questions.map(({ _id, title, slug }) => ({ _id, title, slug })),
-});
+const publicSession = (session, questions) => {
+  const drafts = (session.drafts || [])
+    .filter((draft) => !isBoilerplateCode(draft.language, draft.sourceCode))
+    .map((draft) => ({
+      problemId: draft.problemId || draft.questionId,
+      questionId: draft.questionId || draft.problemId,
+      language: draft.language,
+      code: draft.sourceCode,
+      sourceCode: draft.sourceCode,
+      lastSavedAt: draft.lastSavedAt,
+    }));
+
+  const evaluations = (session.evaluations || []).map((evaluation) => {
+    const questionId = String(evaluation.questionId);
+    let savedDraft = drafts.find((draft) =>
+      String(draft.questionId) === questionId && draft.language === evaluation.language
+    );
+
+    if (!savedDraft) {
+      const sourceCode = evaluation.code;
+      if (!isBoilerplateCode(evaluation.language, sourceCode)) {
+        savedDraft = {
+          problemId: evaluation.problemId || evaluation.questionId,
+          questionId: evaluation.questionId,
+          language: evaluation.language,
+          code: sourceCode,
+          sourceCode,
+          lastSavedAt: evaluation.evaluatedAt,
+        };
+        drafts.push(savedDraft);
+      }
+    }
+
+    const isCurrent = savedDraft?.sourceCode === evaluation.code;
+    const accepted = isCurrent
+      && evaluation.accepted === true
+      && evaluation.totalTests > 0
+      && evaluation.passedTests === evaluation.totalTests;
+    return {
+      questionId: evaluation.questionId,
+      language: evaluation.language,
+      code: evaluation.code,
+      status: isCurrent ? evaluation.status : 'not-evaluated',
+      passedTests: isCurrent ? evaluation.passedTests : 0,
+      totalTests: evaluation.totalTests,
+      accepted,
+      awardedPoints: accepted ? evaluation.awardedPoints : 0,
+      evaluatedAt: evaluation.evaluatedAt,
+    };
+  });
+
+  return {
+    _id: session._id,
+    assessmentType: session.assessmentType,
+    startedAt: session.startedAt,
+    expiresAt: session.expiresAt,
+    warningCount: session.warningCount || 0,
+    warningEvents: session.warningEvents || [],
+    drafts,
+    evaluations,
+    questions: questions.map(({ _id, title, slug }) => ({ _id, title, slug })),
+  };
+};
 
 const recoverStaleFinalization = async (userId, assessmentType) => {
   const staleBefore = new Date(Date.now() - FINALIZATION_STALE_MS);
@@ -310,6 +365,64 @@ export const recordAssessmentWarning = (assessmentType) => asyncHandler(async (r
   });
 });
 
+export const saveAssessmentDraft = (assessmentType) => asyncHandler(async (req, res) => {
+  const { sessionId, problemId, language, sourceCode } = req.body;
+  const targetSession = await AssessmentSession.findById(sessionId).select('userId').lean();
+  if (targetSession && String(targetSession.userId) !== String(req.user._id)) {
+    res.status(403);
+    throw new Error('Not authorized to save code for this assessment.');
+  }
+  const now = new Date();
+  const sessionFilter = {
+    _id: sessionId,
+    userId: req.user._id,
+    assessmentType,
+    active: true,
+    status: 'in-progress',
+    expiresAt: { $gt: now },
+    questionIds: problemId,
+  };
+  const draft = {
+    problemId: new mongoose.Types.ObjectId(problemId),
+    questionId: new mongoose.Types.ObjectId(problemId),
+    language,
+    sourceCode,
+    lastSavedAt: now,
+  };
+  const update = await AssessmentSession.updateOne(
+    sessionFilter,
+    [{
+      $set: {
+        drafts: {
+          $concatArrays: [
+            {
+              $filter: {
+                input: { $ifNull: ['$drafts', []] },
+                as: 'draft',
+                cond: {
+                  $not: [{
+                    $and: [
+                      { $eq: ['$$draft.questionId', new mongoose.Types.ObjectId(problemId)] },
+                      { $eq: ['$$draft.language', language] },
+                    ],
+                  }],
+                },
+              },
+            },
+            [{ $literal: draft }],
+          ],
+        },
+      },
+    }],
+    { updatePipeline: true }
+  );
+  if (!update.matchedCount) {
+    res.status(409);
+    throw new Error('The assessment session is unavailable or this question is not part of it.');
+  }
+  res.json({ success: true, data: { lastSavedAt: now } });
+});
+
 export const submitAssessment = (assessmentType) => asyncHandler(async (req, res) => {
   const existingSubmission = await AssessmentSubmission.findOne({
     userId: req.user._id,
@@ -369,6 +482,26 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
   const evaluationMap = new Map(
     (session.evaluations || []).map((evaluation) => [String(evaluation.questionId), evaluation])
   );
+  const savedDraftsByQuestion = new Map();
+  for (const draft of session.drafts || []) {
+    const questionId = String(draft.questionId || draft.problemId);
+    const previous = savedDraftsByQuestion.get(questionId) || {
+      language: draft.language,
+      code: draft.sourceCode,
+      lastSavedAt: draft.lastSavedAt,
+      codeByLanguage: {},
+    };
+    const isLatest = new Date(draft.lastSavedAt) >= new Date(previous.lastSavedAt);
+    savedDraftsByQuestion.set(questionId, {
+      language: isLatest ? draft.language : previous.language,
+      code: isLatest ? draft.sourceCode : previous.code,
+      lastSavedAt: isLatest ? draft.lastSavedAt : previous.lastSavedAt,
+      codeByLanguage: {
+        ...previous.codeByLanguage,
+        [draft.language]: draft.sourceCode,
+      },
+    });
+  }
   const orderedProblems = session.questionIds.map((id) => problemMap.get(String(id)));
   if (orderedProblems.some((problem) => !problem)) {
     res.status(409);
@@ -402,9 +535,22 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
   let results;
   try {
     results = await Promise.all(orderedProblems.map(async (problem) => {
-    const answer = providedAnswers.get(String(problem._id));
+    const savedDraft = savedDraftsByQuestion.get(String(problem._id));
+    const answer = providedAnswers.get(String(problem._id)) || (savedDraft
+      ? {
+        questionId: problem._id,
+        language: savedDraft.language,
+        code: savedDraft.code,
+        codeByLanguage: savedDraft.codeByLanguage,
+      }
+      : undefined);
     const language = answer?.language || LANGUAGE_KEYS[0];
-    const code = answer?.code || '';
+    const code = answer?.code ?? '';
+    const codeByLanguage = {
+      ...(savedDraft?.codeByLanguage || {}),
+      ...(answer?.codeByLanguage || {}),
+      [language]: code,
+    };
     const testProblem = assessmentType === 'debugging'
       ? debuggingGraderProblem(problem)
       : problem;
@@ -424,7 +570,7 @@ export const submitAssessment = (assessmentType) => asyncHandler(async (req, res
       slug: problem.slug,
       language,
       code,
-      codeByLanguage: answer?.codeByLanguage || {},
+      codeByLanguage,
       status: resolved.status,
       accepted: resolved.accepted,
       passedTests: resolved.passedTests,
