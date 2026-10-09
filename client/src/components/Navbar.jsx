@@ -86,10 +86,10 @@ const TechizNavbar = () => {
               </>
             ) : (
               <>
-                <Link to="/login" className="btn-outline-techiz" style={{ padding: '6px 18px', fontSize: '0.85rem' }}>
+                <Link to="/login" className="btn-outline-techiz" style={{ padding: '8px 20px', fontSize: '0.9rem', minWidth: '100px', justifyContent: 'center' }}>
                   Login
                 </Link>
-                <Link to="/register" className="btn-techiz" style={{ padding: '6px 18px', fontSize: '0.85rem' }}>
+                <Link to="/register" className="btn-techiz" style={{ padding: '8px 20px', fontSize: '0.9rem', minWidth: '110px', justifyContent: 'center' }}>
                   Register
                 </Link>
               </>

@@ -72,7 +72,13 @@ const LoginPage = () => {
 
               <div className="text-center mt-4" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Don't have an account?{' '}
-                <Link to="/register" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>Register here</Link>
+                <Link to="/register" style={{
+                  color: '#ff6ad4',
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  fontSize: '1.02rem',
+                  letterSpacing: '0.01em',
+                }}>Register here</Link>
               </div>
 
             </div>

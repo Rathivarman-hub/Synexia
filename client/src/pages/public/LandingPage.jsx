@@ -69,8 +69,8 @@ const LandingPage = () => {
         <Container style={{ position: 'relative', zIndex: 1 }}>
           <Row className="align-items-center g-5">
             <Col lg={6} className="fade-in">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                <span style={{ background: 'rgba(209,0,122,0.2)', border: '1px solid rgba(209,0,122,0.4)', borderRadius: 20, padding: '4px 16px', fontSize: '0.8rem', color: '#ff66c4', fontWeight: 600, letterSpacing: 1 }}>
+              <div className="hero-badge-wrap">
+                <span className="hero-badge">
                   <FiZap /> ONLINE JUDGE &amp; PRACTICE PLATFORM
                 </span>
               </div>
@@ -79,23 +79,23 @@ const LandingPage = () => {
                 <span className="gradient-text">Get Judged.</span><br />
                 Climb the Ranks
               </h1>
-              <p className="hero-subtitle" style={{ marginTop: 20, marginBottom: 36 }}>
+              <p className="hero-subtitle">
                 SYNEXIA is a coding practice platform for building and proving programming skills. Submit real solutions in 7 languages, get graded against hidden test cases, and climb the leaderboard.
               </p>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                <Link to="/register" className="btn-techiz" style={{ fontSize: '1rem', padding: '14px 32px' }}>
+              <div className="hero-actions">
+                <Link to="/register" className="btn-techiz hero-primary-btn">
                   <FiTarget /> Start Practising
                 </Link>
-                <Link to="/leaderboard" className="btn-outline-techiz" style={{ fontSize: '1rem', padding: '14px 32px', borderColor: 'rgba(255,255,255,0.3)', color: '#fff' }}>
+                <Link to="/leaderboard" className="btn-outline-techiz hero-secondary-btn">
                   <FiAward /> View Leaderboard
                 </Link>
               </div>
               {/* Stats row */}
-              <div style={{ display: 'flex', gap: 32, marginTop: 48, flexWrap: 'wrap' }}>
+              <div className="hero-stats">
                 {[['8', 'Problems'], ['63', 'Test cases'], ['7', 'Languages'], ['100%', 'Free']].map(([n, l]) => (
-                  <div key={l}>
-                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff' }}>{n}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>{l}</div>
+                  <div key={l} className="hero-stat-item">
+                    <div className="hero-stat-number">{n}</div>
+                    <div className="hero-stat-label">{l}</div>
                   </div>
                 ))}
               </div>
@@ -109,13 +109,13 @@ const LandingPage = () => {
                 { key: 'cpp', lang: 'C++', q: 'Reverse an Integer', type: 'Wrong answer', score: '5/8 cases', ok: false },
                 { key: 'go', lang: 'Go', q: 'Count Vowels', type: 'Accepted', score: '8/8 cases', ok: true },
               ].map((card, i) => (
-                <div key={i} className="floating-card glass-card" style={{ padding: '20px 24px', maxWidth: 380, marginLeft: i % 2 === 0 ? 'auto' : 60 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#fff' }}><LanguageLogo language={card.key} size="sm" style={{ '--language-color': '#fff' }} /> {card.lang}</span>
-                    <span style={{ fontSize: '0.75rem', background: card.ok ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', padding: '2px 10px', borderRadius: 10, color: card.ok ? '#34d399' : '#f87171' }}>{card.type}</span>
+                <div key={i} className="floating-card glass-card" style={{ padding: '16px 18px', maxWidth: 330, marginLeft: i % 2 === 0 ? 'auto' : 60 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#fff', fontSize: '0.88rem' }}><LanguageLogo language={card.key} size="sm" style={{ '--language-color': '#fff' }} /> {card.lang}</span>
+                    <span style={{ fontSize: '0.7rem', background: card.ok ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', padding: '2px 10px', borderRadius: 10, color: card.ok ? '#34d399' : '#f87171' }}>{card.type}</span>
                   </div>
-                  <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', margin: 0 }}>{card.q}</p>
-                  <div style={{ marginTop: 10, color: card.ok ? '#34d399' : '#f87171', fontWeight: 700, fontSize: '0.9rem' }}><FiCheckCircle /> {card.score}</div>
+                  <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', margin: 0 }}>{card.q}</p>
+                  <div style={{ marginTop: 8, color: card.ok ? '#34d399' : '#f87171', fontWeight: 700, fontSize: '0.8rem' }}><FiCheckCircle /> {card.score}</div>
                 </div>
               ))}
             </Col>

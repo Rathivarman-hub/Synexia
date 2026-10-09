@@ -95,7 +95,13 @@ const RegisterPage = () => {
 
               <div className="text-center mt-4" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Already have an account?{' '}
-                <Link to="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>Sign in</Link>
+                <Link to="/login" style={{
+                  color: '#ff6ad4',
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  fontSize: '1.02rem',
+                  letterSpacing: '0.01em',
+                }}>Sign in</Link>
               </div>
             </div>
           </Col>

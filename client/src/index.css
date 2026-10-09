@@ -188,7 +188,7 @@ code, pre, .code-block {
    NAVBAR
    ============================================ */
 .techiz-navbar {
-  background: var(--navbar-bg) !important;
+  background: rgba(3, 10, 20, 0.92) !important;
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 2px 20px rgba(108, 99, 255, 0.08);
@@ -197,6 +197,10 @@ code, pre, .code-block {
   top: 0;
   z-index: 1000;
   transition: var(--transition);
+}
+
+.techiz-navbar .container {
+  max-width: 1340px;
 }
 
 .techiz-navbar .navbar-brand {
@@ -246,12 +250,12 @@ code, pre, .code-block {
 }
 
 .techiz-navbar .nav-link {
-  color: var(--text-secondary) !important;
-  font-weight: 500;
-  padding: 6px 14px !important;
-  border-radius: 8px;
+  color: rgba(255,255,255,0.8) !important;
+  font-weight: 600;
+  padding: 8px 14px !important;
+  border-radius: 10px;
   transition: var(--transition);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .techiz-navbar .navbar-collapse {
@@ -268,19 +272,20 @@ code, pre, .code-block {
 
 .techiz-navbar .nav-link:hover,
 .techiz-navbar .nav-link.active {
-  color: var(--primary) !important;
-  background: rgba(108, 99, 255, 0.1);
+  color: #fff !important;
+  background: linear-gradient(135deg, rgba(255, 0, 153, 0.18), rgba(76, 91, 255, 0.18));
+  border: 1px solid rgba(255, 103, 204, 0.45);
 }
 
 /* ============================================
    BUTTONS
    ============================================ */
 .btn-techiz {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #ff4eb6 0%, #c42dff 100%);
   border: none;
   color: #fff;
-  font-weight: 600;
-  border-radius: var(--radius);
+  font-weight: 700;
+  border-radius: 12px;
   padding: 10px 24px;
   transition: var(--transition);
   cursor: pointer;
@@ -288,11 +293,12 @@ code, pre, .code-block {
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
+  box-shadow: 0 12px 24px rgba(199, 47, 176, 0.26);
 }
 
 .btn-techiz:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(108, 99, 255, 0.4);
+  box-shadow: 0 12px 30px rgba(151, 71, 255, 0.38);
   color: #fff;
 }
 
@@ -300,10 +306,10 @@ code, pre, .code-block {
 
 .btn-outline-techiz {
   background: transparent;
-  border: 2px solid var(--primary);
-  color: var(--primary);
+  border: 2px solid rgba(255, 119, 211, 0.75);
+  color: #fff;
   font-weight: 600;
-  border-radius: var(--radius);
+  border-radius: 12px;
   padding: 8px 22px;
   transition: var(--transition);
   cursor: pointer;
@@ -314,7 +320,7 @@ code, pre, .code-block {
 }
 
 .btn-outline-techiz:hover {
-  background: var(--primary);
+  background: rgba(255,255,255,0.04);
   color: #fff;
   transform: translateY(-2px);
 }
@@ -349,8 +355,8 @@ code, pre, .code-block {
    HERO SECTION
    ============================================ */
 .hero-section {
-  background: var(--gradient-hero);
-  min-height: 100vh;
+  background: linear-gradient(90deg, #021224 0%, #0a2c5d 48%, #8f0e79 100%);
+  min-height: 88vh;
   display: flex;
   align-items: center;
   position: relative;
@@ -361,30 +367,111 @@ code, pre, .code-block {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at 30% 50%, rgba(108,99,255,0.3) 0%, transparent 60%),
-              radial-gradient(ellipse at 70% 80%, rgba(0,212,170,0.2) 0%, transparent 50%);
+  background: radial-gradient(circle at 30% 32%, rgba(59, 130, 246, 0.25), transparent 26%),
+              radial-gradient(circle at 68% 72%, rgba(236, 72, 153, 0.28), transparent 22%),
+              linear-gradient(180deg, rgba(3, 8, 20, 0.08), rgba(3, 8, 20, 0.25));
+}
+
+.hero-section .container {
+  position: relative;
+  z-index: 1;
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+}
+
+.hero-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(216, 0, 130, 0.22);
+  border: 1px solid rgba(255, 110, 200, 0.6);
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 0.7rem;
+  color: #ff7fcf;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
 }
 
 .hero-title {
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  font-size: clamp(2.7rem, 5vw, 5.5rem);
   font-weight: 900;
   color: #fff;
-  line-height: 1.1;
-  letter-spacing: -1px;
+  line-height: 0.94;
+  letter-spacing: -0.07em;
+  margin: 0 0 14px;
 }
 
 .hero-title .gradient-text {
-  background: var(--gradient-primary);
+  display: inline-block;
+  background: linear-gradient(135deg, #ff6ad4 0%, #ff4eb6 28%, #d97cff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .hero-subtitle {
-  font-size: 1.2rem;
-  color: rgba(255,255,255,0.7);
-  max-width: 560px;
-  line-height: 1.7;
+  font-size: clamp(1.02rem, 1.5vw, 1.55rem);
+  color: rgba(255,255,255,0.8);
+  max-width: 700px;
+  line-height: 1.42;
+  margin: 0 0 22px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.hero-primary-btn,
+.hero-secondary-btn {
+  min-height: 48px;
+  padding: 12px 22px !important;
+  font-size: 0.95rem !important;
+  border-radius: 14px !important;
+}
+
+.hero-secondary-btn {
+  border-color: rgba(255,255,255,0.4) !important;
+  color: #fff !important;
+  background: rgba(255,255,255,0.04) !important;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.hero-stat-item {
+  min-width: 92px;
+}
+
+.hero-stat-number {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.hero-stat-label {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.62);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .floating-card {
@@ -760,15 +847,21 @@ code, pre, .code-block {
    LANGUAGE CARDS
    ============================================ */
 .lang-card {
-  background: var(--bg-card);
-  border: 2px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 32px 24px;
+  background: rgba(14, 22, 40, 0.82);
+  border: 2px solid rgba(255, 110, 200, 0.4);
+  border-radius: 24px;
+  padding: 26px 18px 18px;
   text-align: center;
   cursor: pointer;
   transition: var(--transition);
   position: relative;
   overflow: hidden;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
 }
 
 .lang-card::after {
@@ -801,33 +894,39 @@ code, pre, .code-block {
 .language-logo-lg { font-size: 2.25rem; }
 
 .lang-card .language-logo {
-  width: 88px;
-  height: 88px;
-  margin-bottom: 16px;
+  width: 92px;
+  height: 92px;
+  margin-bottom: 18px;
   padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--language-color) 30%, transparent);
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--language-color) 12%, var(--bg-card));
-  box-shadow: 0 12px 26px color-mix(in srgb, var(--language-color) 16%, transparent);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.02);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
   transition: var(--transition);
 }
 
 .lang-card:hover .language-logo {
-  transform: translateY(-3px) scale(1.06);
-  background: color-mix(in srgb, var(--language-color) 18%, var(--bg-card));
+  transform: translateY(-3px) scale(1.04);
+  background: rgba(255,255,255,0.04);
 }
 
 .lang-icon { display: block; }
-.lang-name { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
+.lang-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
 .lang-badge {
   display: inline-block;
-  margin-top: 8px;
-  padding: 3px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
+  margin-top: 2px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.68rem;
   font-weight: 600;
-  background: rgba(108, 99, 255, 0.1);
-  color: var(--primary);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.72);
+  letter-spacing: 0.04em;
 }
 
 /* ============================================
