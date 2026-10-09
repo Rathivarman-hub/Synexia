@@ -67,6 +67,7 @@ export const AssessmentSessionProvider = ({ children }) => {
   const lastTransitionRef = useRef(null);
   const finishInProgressRef = useRef(false);
   const warningWriteRef = useRef(Promise.resolve());
+  const loadAssessmentRef = useRef(null);
 
   useEffect(() => {
     activeRef.current = false;
@@ -212,6 +213,14 @@ export const AssessmentSessionProvider = ({ children }) => {
     } catch (error) {
       finishInProgressRef.current = false;
       setAssessmentSubmitting(false);
+      activeRef.current = false;
+      const assessmentStatus = await loadAssessmentRef.current?.(assessmentType);
+      if (assessmentStatus?.submitted) {
+        setAssessmentSubmitError('');
+        await exitFullscreen();
+        navigate(`/${assessmentType}/problems`, { replace: true });
+        return;
+      }
       setAssessmentSubmitError(error.response?.data?.message || 'Could not submit the assessment. Please try again.');
       return;
     }
@@ -253,7 +262,7 @@ export const AssessmentSessionProvider = ({ children }) => {
     await exitFullscreen();
     await new Promise((resolve) => setTimeout(resolve, 1200));
     setWarningDialog(null);
-    navigate('/dashboard', { replace: true });
+    navigate(`/${assessmentType}/problems`, { replace: true });
   }, [assessmentAnswers, assessmentQuestions, assessmentSessionId, assessmentType, navigate, userId]);
 
   const recordWarning = useCallback((type) => {
@@ -345,13 +354,20 @@ export const AssessmentSessionProvider = ({ children }) => {
   );
 
   const loadAssessment = useCallback(async (type, expectedUserId = userId) => {
-    if (activeRef.current) return;
+    if (activeRef.current) return { submitted: false, skipped: true };
     setAssessmentLoadError('');
     setAssessmentLoaded(false);
     try {
       const { data } = await api.get(`/${type}/assessment/me`);
-      if (userIdRef.current !== expectedUserId) return;
+      if (userIdRef.current !== expectedUserId) return { submitted: false, skipped: true };
       setAssessmentType(type);
+      if (data.data.finalizing) {
+        activeRef.current = false;
+        setAssessmentStarted(false);
+        setAssessmentLoadError('Your assessment submission is being finalized. Check its status again shortly.');
+        setAssessmentLoaded(true);
+        return { submitted: false, finalizing: true };
+      }
       if (data.data.submitted) {
         const submission = data.data.submission;
         activeRef.current = false;
@@ -394,7 +410,7 @@ export const AssessmentSessionProvider = ({ children }) => {
           },
         ])));
         setAssessmentLoaded(true);
-        return;
+        return { submitted: true, submission };
       }
       setAssessmentSubmitted(false);
       setAssessmentSubmission(null);
@@ -455,14 +471,17 @@ export const AssessmentSessionProvider = ({ children }) => {
         setStartedAt(null);
       }
       setAssessmentLoaded(true);
+      return { submitted: false, session: data.data.session };
     } catch (error) {
       if (userIdRef.current === expectedUserId) {
         console.error('Could not load the saved assessment:', error);
         setAssessmentLoadError(error.response?.data?.message || 'Assessment status could not be loaded. Retry before starting.');
         setAssessmentLoaded(true);
       }
+      return { submitted: false, error };
     }
   }, [userId]);
+  loadAssessmentRef.current = loadAssessment;
 
   useEffect(() => {
     const match = location.pathname.match(/^\/(coding|debugging)\/problems(?:\/|$)/);
@@ -569,6 +588,7 @@ export const AssessmentSessionProvider = ({ children }) => {
     assessmentResults,
     assessmentSubmission,
     assessmentSubmitted,
+    isAssessmentSubmitted: assessmentSubmitted,
     assessmentLoaded,
     assessmentLoadError,
     assessmentSubmitting,

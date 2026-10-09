@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import AssessmentSubmission from '../models/AssessmentSubmission.js';
+import AssessmentSession from '../models/AssessmentSession.js';
 import { submitAssessmentSchema } from '../validators/assessmentValidators.js';
 
 test('accepts eight answers with empty or omitted code', async () => {
@@ -40,4 +41,31 @@ test('validates an omitted draft as an empty answer code', () => {
 
   assert.equal(error, undefined);
   assert.equal(value.answers[0].code, '');
+});
+
+test('database indexes enforce one final record per student and assessment type', () => {
+  const indexes = AssessmentSubmission.schema.indexes();
+  assert.ok(indexes.some(([keys, options]) =>
+    keys.userId === 1
+    && keys.assessmentType === 1
+    && options.unique === true
+  ));
+  assert.ok(indexes.some(([keys, options]) =>
+    keys.sessionId === 1
+    && options.unique === true
+  ));
+});
+
+test('assessment sessions use a unique active-attempt lock per student and type', () => {
+  const indexes = AssessmentSession.schema.indexes();
+  assert.ok(indexes.some(([keys, options]) =>
+    keys.userId === 1
+    && keys.assessmentType === 1
+    && options.unique === true
+    && options.partialFilterExpression?.active === true
+  ));
+  assert.deepEqual(
+    AssessmentSession.schema.path('status').enumValues,
+    ['in-progress', 'finalizing', 'submitted']
+  );
 });

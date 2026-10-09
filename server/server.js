@@ -28,6 +28,7 @@ import adminRoutes from './routes/admin.js';
 import codingRoutes from './routes/coding.js';
 import debuggingRoutes from './routes/debugging.js';
 import { seedDebuggingProblems } from './services/debuggingProblemSeeder.js';
+import { finalizeExpiredAssessments } from './controllers/assessmentController.js';
 
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught Exception', { message: err.message, stack: err.stack });
@@ -126,12 +127,25 @@ const startServer = async () => {
   await connectRedis();
   initializeCodeLimiter();
 
+  let expiryCheckRunning = false;
+  const runExpiryCheck = () => {
+    if (expiryCheckRunning) return;
+    expiryCheckRunning = true;
+    void finalizeExpiredAssessments()
+      .catch((error) => logger.error(`Assessment expiry check failed: ${error.message}`))
+      .finally(() => { expiryCheckRunning = false; });
+  };
+  runExpiryCheck();
+  const assessmentExpiryWorker = setInterval(runExpiryCheck, 15_000);
+  assessmentExpiryWorker.unref();
+
   const server = app.listen(PORT, () =>
     logger.info(`🚀 Synexia server running on port ${PORT} [PID: ${process.pid}]`)
   );
 
   const gracefulShutdown = async (signal) => {
     logger.info(`${signal} received — shutting down gracefully`);
+    clearInterval(assessmentExpiryWorker);
     server.close(async () => {
       logger.info('HTTP server closed');
       await mongoose.connection.close();

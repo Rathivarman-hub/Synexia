@@ -42,7 +42,6 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
   const {
     assessmentStarted,
     assessmentQuestions,
-    assessmentSubmission,
     assessmentSubmitted,
     assessmentLoaded,
     assessmentLoadError,
@@ -154,7 +153,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
     };
   }, [visibleProblems]);
 
-  const showLandingScreen = !assessmentStarted;
+  const showLandingScreen = !assessmentStarted || assessmentSubmitted;
   const listPath = isDebugging ? '/debugging/problems' : '/coding/problems';
   const assessmentName = isDebugging ? 'Coding Assessment' : 'Coding Practice';
 
@@ -174,7 +173,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
               </p>
             </div>
             <div className="coding-hero-actions">
-              {!isDebugging && !assessmentStarted && (
+              {!isDebugging && !assessmentStarted && !assessmentSubmitted && (
                 <Link to="/coding/submissions" className="coding-hero-btn coding-hero-btn--primary">
                   <FiList /> My Submissions
                 </Link>
@@ -248,7 +247,6 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
           )}
           {assessmentSubmitted && assessmentQuestions[0] && (
             <div className="assessment-completed-summary" role="status">
-              <strong>Final score: {assessmentSubmission?.score || 0}/{assessmentSubmission?.maxScore || 0}</strong>
               <Link
                 to={`${listPath}/${assessmentQuestions[0].slug}`}
                 className="coding-hero-btn coding-hero-btn--primary"
@@ -282,7 +280,7 @@ const CodingProblemsPage = ({ isDebugging = false }) => {
             </div>
             <div className="coding-hero-actions">
               {assessmentStarted && <AssessmentFinishControl />}
-              {!isDebugging && !assessmentStarted && (
+              {!isDebugging && !assessmentStarted && !assessmentSubmitted && (
             <Link to="/coding/submissions" className="coding-hero-btn coding-hero-btn--primary">
               <FiList /> My Submissions
             </Link>

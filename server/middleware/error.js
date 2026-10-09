@@ -1,7 +1,7 @@
 import logger from '../config/logger.js';
 
 export const errorHandler = (err, req, res, next) => {
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  const statusCode = err.statusCode || err.status || (res.statusCode === 200 ? 500 : res.statusCode);
 
   // Log all 5xx errors as errors, 4xx as warnings
   if (statusCode >= 500) {

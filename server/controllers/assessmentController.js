@@ -300,6 +300,45 @@ export const getMyAssessment = (assessmentType) => asyncHandler(async (req, res)
     res.json({ success: true, data: { submitted: false, session: null } });
     return;
   }
+  if (session.status === 'finalizing') {
+    res.json({ success: true, data: { submitted: false, finalizing: true } });
+    return;
+  }
+  if (session.expiresAt <= new Date()) {
+    try {
+      const expiredSubmission = await finalizeAssessment({
+        userId: req.user._id,
+        assessmentType,
+        sessionId: session._id,
+        requestedReason: 'time-limit',
+      });
+      res.json({
+        success: true,
+        data: {
+          submitted: true,
+          submission: normalizeAssessmentSubmissionScore(expiredSubmission),
+        },
+      });
+      return;
+    } catch (error) {
+      if (error.status !== 409) throw error;
+      const saved = await AssessmentSubmission.findOne({
+        userId: req.user._id,
+        assessmentType,
+      }).lean({ flattenMaps: true });
+      if (saved) {
+        res.json({
+          success: true,
+          data: {
+            submitted: true,
+            submission: normalizeAssessmentSubmissionScore(saved),
+          },
+        });
+        return;
+      }
+      throw error;
+    }
+  }
 
   const questions = await modelFor(assessmentType)
     .find({ _id: { $in: session.questionIds } })
@@ -314,6 +353,233 @@ export const getMyAssessment = (assessmentType) => asyncHandler(async (req, res)
     },
   });
 });
+
+const assessmentError = (status, message) => Object.assign(new Error(message), { status });
+
+export const finalizeAssessment = async ({
+  userId,
+  assessmentType,
+  sessionId,
+  answers = [],
+  requestedReason = 'manual-submit',
+}) => {
+  const existingSubmission = await AssessmentSubmission.findOne({
+    userId,
+    assessmentType,
+  }).lean();
+  if (existingSubmission) {
+    throw assessmentError(409, 'This assessment has already been submitted and is locked.');
+  }
+
+  await recoverStaleFinalization(userId, assessmentType);
+  const session = await AssessmentSession.findOne({
+    _id: sessionId,
+    userId,
+    assessmentType,
+    status: 'in-progress',
+    active: true,
+  });
+  if (!session) {
+    throw assessmentError(409, 'No active assessment session was found. Your assessment was not saved.');
+  }
+
+  const now = Date.now();
+  const expired = now >= session.expiresAt.getTime();
+  const reason = expired ? 'time-limit' : requestedReason;
+  if (!['manual-submit', 'warning-limit', 'time-limit'].includes(reason)) {
+    throw assessmentError(400, 'Invalid assessment submission reason.');
+  }
+  if (!expired && reason === 'time-limit') {
+    throw assessmentError(400, 'The assessment time limit has not ended.');
+  }
+  if (!expired && reason === 'warning-limit' && session.warningCount < WARNING_LIMIT) {
+    throw assessmentError(400, 'Automatic submission requires the maximum warning count.');
+  }
+
+  const providedAnswers = new Map(
+    answers.map((answer) => [String(answer.questionId), answer])
+  );
+  if (providedAnswers.size !== answers.length) {
+    throw assessmentError(400, 'Each assessment question can only have one final answer.');
+  }
+  const questionIdSet = new Set(session.questionIds.map(String));
+  if ([...providedAnswers.keys()].some((id) => !questionIdSet.has(id))) {
+    throw assessmentError(400, 'The submitted answers do not match this assessment.');
+  }
+
+  const Problem = modelFor(assessmentType);
+  const problems = await Problem.find({ _id: { $in: session.questionIds } })
+    .select(assessmentType === 'debugging'
+      ? '+hiddenTestCases title slug points languageTemplates visibleTestCases sampleInput sampleOutput'
+      : '+hiddenTestCases title slug points testCases')
+    .lean();
+  const problemMap = new Map(problems.map((problem) => [String(problem._id), problem]));
+  const evaluationMap = new Map(
+    (session.evaluations || []).map((evaluation) => [String(evaluation.questionId), evaluation])
+  );
+  const savedDraftsByQuestion = new Map();
+  for (const draft of session.drafts || []) {
+    const questionId = String(draft.questionId || draft.problemId);
+    const previous = savedDraftsByQuestion.get(questionId) || {
+      language: draft.language,
+      code: draft.sourceCode,
+      lastSavedAt: draft.lastSavedAt,
+      codeByLanguage: {},
+    };
+    const isLatest = new Date(draft.lastSavedAt) >= new Date(previous.lastSavedAt);
+    savedDraftsByQuestion.set(questionId, {
+      language: isLatest ? draft.language : previous.language,
+      code: isLatest ? draft.sourceCode : previous.code,
+      lastSavedAt: isLatest ? draft.lastSavedAt : previous.lastSavedAt,
+      codeByLanguage: {
+        ...previous.codeByLanguage,
+        [draft.language]: draft.sourceCode,
+      },
+    });
+  }
+  const orderedProblems = session.questionIds.map((id) => problemMap.get(String(id)));
+  if (orderedProblems.some((problem) => !problem)) {
+    throw assessmentError(409, 'An assessment question is no longer available. Contact an administrator before submitting.');
+  }
+
+  const finalizingSession = await AssessmentSession.findOneAndUpdate(
+    {
+      _id: session._id,
+      userId,
+      assessmentType,
+      active: true,
+      status: 'in-progress',
+    },
+    { $set: { status: 'finalizing' } },
+    { returnDocument: 'after' }
+  );
+  if (!finalizingSession) {
+    const saved = await AssessmentSubmission.exists({ userId, assessmentType });
+    if (saved) {
+      throw assessmentError(409, 'This assessment has already been submitted and is locked.');
+    }
+    throw assessmentError(409, 'This assessment is already being submitted. Please check its status.');
+  }
+
+  let results;
+  try {
+    results = await Promise.all(orderedProblems.map(async (problem) => {
+      const savedDraft = savedDraftsByQuestion.get(String(problem._id));
+      const answer = providedAnswers.get(String(problem._id)) || (savedDraft
+        ? {
+          questionId: problem._id,
+          language: savedDraft.language,
+          code: savedDraft.code,
+          codeByLanguage: savedDraft.codeByLanguage,
+        }
+        : undefined);
+      const language = answer?.language || LANGUAGE_KEYS[0];
+      const code = answer?.code ?? '';
+      const codeByLanguage = {
+        ...(savedDraft?.codeByLanguage || {}),
+        ...(answer?.codeByLanguage || {}),
+        [language]: code,
+      };
+      const testProblem = assessmentType === 'debugging'
+        ? debuggingGraderProblem(problem)
+        : problem;
+      const resolved = resolveAssessmentAnswer({
+        answer,
+        evaluation: evaluationMap.get(String(problem._id)),
+        maxPoints: problem.points || 0,
+        questionTestCount: (testProblem.testCases || []).length,
+        boilerplate: isBoilerplateCode(language, code),
+      });
+
+      return {
+        problemId: problem._id,
+        questionId: problem._id,
+        title: problem.title,
+        slug: problem.slug,
+        language,
+        code,
+        codeByLanguage,
+        status: resolved.status,
+        accepted: resolved.accepted,
+        passedTests: resolved.passedTests,
+        totalTests: resolved.totalTests,
+        awardedPoints: resolved.awardedPoints,
+        passedCases: resolved.passedTests,
+        failedCases: resolved.failedTests,
+        totalCases: resolved.totalTests,
+        accuracy: resolved.accuracy,
+        score: resolved.awardedPoints,
+        maxScore: problem.points || 0,
+        executionTime: 0,
+        testResults: [],
+      };
+    }));
+  } catch (error) {
+    await AssessmentSession.updateOne(
+      { _id: finalizingSession._id, status: 'finalizing' },
+      { $set: { status: 'in-progress' } }
+    );
+    throw error;
+  }
+
+  const score = results.reduce((sum, answer) => sum + answer.awardedPoints, 0);
+  const maxScore = results.reduce((sum, answer) => sum + answer.maxScore, 0);
+  const passedCases = results.reduce((sum, answer) => sum + answer.passedCases, 0);
+  const totalCases = results.reduce((sum, answer) => sum + answer.totalCases, 0);
+  const status = results.every((answer) => answer.status === 'accepted')
+    ? 'accepted'
+    : results.some((answer) => answer.awardedPoints > 0)
+      ? 'partial'
+      : results.find((answer) => answer.status === 'internal-error')?.status || 'wrong-answer';
+
+  let submission;
+  try {
+    submission = await AssessmentSubmission.create({
+      userId,
+      assessmentType,
+      sessionId: session._id,
+      answers: results,
+      status,
+      score,
+      maxScore,
+      passedCases,
+      totalCases,
+      warningCount: finalizingSession.warningCount,
+      warningEvents: finalizingSession.warningEvents,
+      elapsedSeconds: Math.min(
+        Math.floor(DURATION_MS / 1000),
+        Math.max(0, Math.floor((now - session.startedAt.getTime()) / 1000))
+      ),
+      reason,
+      submittedAt: new Date(now),
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      throw assessmentError(409, 'This assessment has already been submitted and is locked.');
+    }
+    try {
+      await AssessmentSession.updateOne(
+        { _id: finalizingSession._id, status: 'finalizing' },
+        { $set: { status: 'in-progress' } }
+      );
+    } catch (resetError) {
+      logger.error(`Could not release assessment finalization lock: session=${finalizingSession._id} error=${resetError.message}`);
+    }
+    throw error;
+  }
+
+  finalizingSession.status = 'submitted';
+  finalizingSession.active = false;
+  finalizingSession.submittedAt = submission.submittedAt;
+  try {
+    await finalizingSession.save();
+  } catch (saveError) {
+    logger.error(`Could not mark assessment session submitted: session=${finalizingSession._id} error=${saveError.message}`);
+  }
+  await invalidateAssessmentCaches(userId);
+  logger.info(`Assessment submitted: user=${userId} type=${assessmentType} score=${score}/${maxScore} reason=${reason}`);
+  return submission;
+};
 
 export const recordAssessmentWarning = (assessmentType) => asyncHandler(async (req, res) => {
   const { sessionId, event } = req.body;
@@ -342,6 +608,24 @@ export const recordAssessmentWarning = (assessmentType) => asyncHandler(async (r
   ).select('warningCount warningEvents');
 
   if (recorded) {
+    if (recorded.warningCount >= WARNING_LIMIT) {
+      const submission = await finalizeAssessment({
+        userId: req.user._id,
+        assessmentType,
+        sessionId,
+        requestedReason: 'warning-limit',
+      });
+      res.json({
+        success: true,
+        data: {
+          warningCount: submission.warningCount,
+          warningEvents: submission.warningEvents,
+          submitted: true,
+          submission,
+        },
+      });
+      return;
+    }
     res.json({ success: true, data: { warningCount: recorded.warningCount, warningEvents: recorded.warningEvents } });
     return;
   }
@@ -354,6 +638,25 @@ export const recordAssessmentWarning = (assessmentType) => asyncHandler(async (r
   const duplicate = session.warningEvents.some((warning) =>
     warning.type === event.type && new Date(warning.occurredAt).getTime() === new Date(event.occurredAt).getTime()
   );
+  if (session.warningCount >= WARNING_LIMIT) {
+    const submission = await finalizeAssessment({
+      userId: req.user._id,
+      assessmentType,
+      sessionId,
+      requestedReason: 'warning-limit',
+    });
+    res.json({
+      success: true,
+      alreadyRecorded: duplicate,
+      data: {
+        warningCount: submission.warningCount,
+        warningEvents: submission.warningEvents,
+        submitted: true,
+        submission,
+      },
+    });
+    return;
+  }
   if (!duplicate && session.warningCount < WARNING_LIMIT) {
     res.status(409);
     throw new Error('The warning could not be recorded. Please retry before continuing.');
@@ -424,247 +727,35 @@ export const saveAssessmentDraft = (assessmentType) => asyncHandler(async (req, 
 });
 
 export const submitAssessment = (assessmentType) => asyncHandler(async (req, res) => {
-  const existingSubmission = await AssessmentSubmission.findOne({
+  const submission = await finalizeAssessment({
     userId: req.user._id,
     assessmentType,
-  }).lean();
-  if (existingSubmission) {
-    await markSessionSubmitted(existingSubmission.sessionId, req.user._id, assessmentType, existingSubmission.submittedAt);
-    await invalidateAssessmentCaches(req.user._id);
-    res.json({
-      success: true,
-      alreadySubmitted: true,
-      data: normalizeAssessmentSubmissionScore(existingSubmission),
-    });
-    return;
-  }
-
-  await recoverStaleFinalization(req.user._id, assessmentType);
-  const session = await AssessmentSession.findOne({
-    _id: req.body.sessionId,
-    userId: req.user._id,
-    assessmentType,
-    status: 'in-progress',
+    sessionId: req.body.sessionId,
+    answers: req.body.answers,
+    requestedReason: req.body.reason || 'manual-submit',
   });
-  if (!session) {
-    res.status(409);
-    throw new Error('No active assessment session was found. Your assessment was not saved.');
-  }
-
-  const now = Date.now();
-  const expired = now >= session.expiresAt.getTime();
-  const reason = expired ? 'time-limit' : req.body.reason;
-  if (!expired && reason === 'warning-limit' && session.warningCount < WARNING_LIMIT) {
-    res.status(400);
-    throw new Error('Automatic submission requires the maximum warning count.');
-  }
-
-  const providedAnswers = new Map(
-    req.body.answers.map((answer) => [String(answer.questionId), answer])
-  );
-  if (providedAnswers.size !== req.body.answers.length) {
-    res.status(400);
-    throw new Error('Each assessment question can only have one final answer.');
-  }
-  const questionIdSet = new Set(session.questionIds.map(String));
-  if ([...providedAnswers.keys()].some((id) => !questionIdSet.has(id))) {
-    res.status(400);
-    throw new Error('The submitted answers do not match this assessment.');
-  }
-
-  const Problem = modelFor(assessmentType);
-  const problems = await Problem.find({ _id: { $in: session.questionIds } })
-    .select(assessmentType === 'debugging'
-      ? '+hiddenTestCases title slug points languageTemplates visibleTestCases sampleInput sampleOutput'
-      : '+hiddenTestCases title slug points testCases')
-    .lean();
-  const problemMap = new Map(problems.map((problem) => [String(problem._id), problem]));
-  const evaluationMap = new Map(
-    (session.evaluations || []).map((evaluation) => [String(evaluation.questionId), evaluation])
-  );
-  const savedDraftsByQuestion = new Map();
-  for (const draft of session.drafts || []) {
-    const questionId = String(draft.questionId || draft.problemId);
-    const previous = savedDraftsByQuestion.get(questionId) || {
-      language: draft.language,
-      code: draft.sourceCode,
-      lastSavedAt: draft.lastSavedAt,
-      codeByLanguage: {},
-    };
-    const isLatest = new Date(draft.lastSavedAt) >= new Date(previous.lastSavedAt);
-    savedDraftsByQuestion.set(questionId, {
-      language: isLatest ? draft.language : previous.language,
-      code: isLatest ? draft.sourceCode : previous.code,
-      lastSavedAt: isLatest ? draft.lastSavedAt : previous.lastSavedAt,
-      codeByLanguage: {
-        ...previous.codeByLanguage,
-        [draft.language]: draft.sourceCode,
-      },
-    });
-  }
-  const orderedProblems = session.questionIds.map((id) => problemMap.get(String(id)));
-  if (orderedProblems.some((problem) => !problem)) {
-    res.status(409);
-    throw new Error('An assessment question is no longer available. Contact an administrator before submitting.');
-  }
-
-  const finalizingSession = await AssessmentSession.findOneAndUpdate(
-    {
-      _id: session._id,
-      userId: req.user._id,
-      assessmentType,
-      status: 'in-progress',
-    },
-    { $set: { status: 'finalizing' } },
-    { returnDocument: 'after' }
-  );
-  if (!finalizingSession) {
-    const saved = await AssessmentSubmission.findOne({ userId: req.user._id, assessmentType }).lean();
-    if (saved) {
-      res.json({
-        success: true,
-        alreadySubmitted: true,
-        data: normalizeAssessmentSubmissionScore(saved),
-      });
-      return;
-    }
-    res.status(409);
-    throw new Error('This assessment is already being submitted. Please wait and retry.');
-  }
-
-  let results;
-  try {
-    results = await Promise.all(orderedProblems.map(async (problem) => {
-    const savedDraft = savedDraftsByQuestion.get(String(problem._id));
-    const answer = providedAnswers.get(String(problem._id)) || (savedDraft
-      ? {
-        questionId: problem._id,
-        language: savedDraft.language,
-        code: savedDraft.code,
-        codeByLanguage: savedDraft.codeByLanguage,
-      }
-      : undefined);
-    const language = answer?.language || LANGUAGE_KEYS[0];
-    const code = answer?.code ?? '';
-    const codeByLanguage = {
-      ...(savedDraft?.codeByLanguage || {}),
-      ...(answer?.codeByLanguage || {}),
-      [language]: code,
-    };
-    const testProblem = assessmentType === 'debugging'
-      ? debuggingGraderProblem(problem)
-      : problem;
-    const storedEvaluation = evaluationMap.get(String(problem._id));
-    const resolved = resolveAssessmentAnswer({
-      answer,
-      evaluation: storedEvaluation,
-      maxPoints: problem.points || 0,
-      questionTestCount: (testProblem.testCases || []).length,
-      boilerplate: isBoilerplateCode(language, code),
-    });
-
-    return {
-      problemId: problem._id,
-      questionId: problem._id,
-      title: problem.title,
-      slug: problem.slug,
-      language,
-      code,
-      codeByLanguage,
-      status: resolved.status,
-      accepted: resolved.accepted,
-      passedTests: resolved.passedTests,
-      totalTests: resolved.totalTests,
-      awardedPoints: resolved.awardedPoints,
-      passedCases: resolved.passedTests,
-      failedCases: resolved.failedTests,
-      totalCases: resolved.totalTests,
-      accuracy: resolved.accuracy,
-      score: resolved.awardedPoints,
-      maxScore: problem.points || 0,
-      executionTime: 0,
-      testResults: [],
-    };
-    }));
-  } catch (error) {
-    try {
-      await AssessmentSession.updateOne(
-        { _id: finalizingSession._id, status: 'finalizing' },
-        { $set: { status: 'in-progress' } }
-      );
-    } catch (resetError) {
-      logger.error(`Could not release assessment finalization lock: session=${finalizingSession._id} error=${resetError.message}`);
-    }
-    throw error;
-  }
-
-  const score = results.reduce((sum, answer) => sum + answer.awardedPoints, 0);
-  const maxScore = results.reduce((sum, answer) => sum + answer.maxScore, 0);
-  const passedCases = results.reduce((sum, answer) => sum + answer.passedCases, 0);
-  const totalCases = results.reduce((sum, answer) => sum + answer.totalCases, 0);
-  const status = results.every((answer) => answer.status === 'accepted')
-    ? 'accepted'
-    : results.some((answer) => answer.awardedPoints > 0)
-      ? 'partial'
-      : results.find((answer) => answer.status === 'internal-error')?.status || 'wrong-answer';
-
-  let submission;
-  try {
-    submission = await AssessmentSubmission.create({
-      userId: req.user._id,
-      assessmentType,
-      sessionId: session._id,
-      answers: results,
-      status,
-      score,
-      maxScore,
-      passedCases,
-      totalCases,
-      warningCount: finalizingSession.warningCount,
-      warningEvents: finalizingSession.warningEvents,
-      elapsedSeconds: Math.min(
-        Math.floor(DURATION_MS / 1000),
-        Math.max(0, Math.floor((now - session.startedAt.getTime()) / 1000))
-      ),
-      reason,
-      submittedAt: new Date(now),
-    });
-  } catch (error) {
-    if (error.code !== 11000) {
-      try {
-        await AssessmentSession.updateOne(
-          { _id: finalizingSession._id, status: 'finalizing' },
-          { $set: { status: 'in-progress' } }
-        );
-      } catch (resetError) {
-        logger.error(`Could not release assessment finalization lock: session=${finalizingSession._id} error=${resetError.message}`);
-      }
-      throw error;
-    }
-    const saved = await AssessmentSubmission.findOne({ userId: req.user._id, assessmentType }).lean();
-    if (!saved) throw error;
-    finalizingSession.status = 'submitted';
-    finalizingSession.active = false;
-    finalizingSession.submittedAt = saved.submittedAt;
-    try {
-      await finalizingSession.save();
-    } catch (saveError) {
-      logger.error(`Could not mark assessment session submitted: session=${finalizingSession._id} error=${saveError.message}`);
-    }
-    await invalidateAssessmentCaches(req.user._id);
-    res.json({ success: true, alreadySubmitted: true, data: saved });
-    return;
-  }
-
-  finalizingSession.status = 'submitted';
-  finalizingSession.active = false;
-  finalizingSession.submittedAt = submission.submittedAt;
-  try {
-    await finalizingSession.save();
-  } catch (saveError) {
-    logger.error(`Could not mark assessment session submitted: session=${finalizingSession._id} error=${saveError.message}`);
-  }
-  await invalidateAssessmentCaches(req.user._id);
-  logger.info(`Assessment submitted: user=${req.user._id} type=${assessmentType} score=${score}/${maxScore} reason=${reason}`);
   res.status(201).json({ success: true, data: submission });
 });
+
+export const finalizeExpiredAssessments = async () => {
+  const expiredSessions = await AssessmentSession.find({
+    active: true,
+    status: 'in-progress',
+    expiresAt: { $lte: new Date() },
+  }).select('_id userId assessmentType').lean();
+
+  await Promise.all(expiredSessions.map(async (session) => {
+    try {
+      await finalizeAssessment({
+        userId: session.userId,
+        assessmentType: session.assessmentType,
+        sessionId: session._id,
+        requestedReason: 'time-limit',
+      });
+    } catch (error) {
+      if (error.status !== 409) {
+        logger.error(`Expired assessment could not be finalized: session=${session._id} error=${error.message}`);
+      }
+    }
+  }));
+};

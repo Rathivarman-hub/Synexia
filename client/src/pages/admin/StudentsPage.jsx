@@ -306,6 +306,9 @@ const StudentsPage = () => {
                                                 <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                                                   {sub.questionsPassed}/{sub.questionCount} questions accepted
                                                 </div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                  Final score: {sub.score}/{sub.maxScore}
+                                                </div>
                                                 <details style={{ marginTop: 6 }}>
                                                   <summary>Question results</summary>
                                                   <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
@@ -324,6 +327,12 @@ const StudentsPage = () => {
                                                           {question.passedTests}/{question.totalTests} tests
                                                           {' · '}
                                                           {question.awardedPoints}/{question.maxScore} pts
+                                                          <details style={{ marginTop: 4 }}>
+                                                            <summary>Submitted source code</summary>
+                                                            <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                                                              {question.code || '(empty answer)'}
+                                                            </pre>
+                                                          </details>
                                                         </div>
                                                       );
                                                     })}
@@ -347,9 +356,11 @@ const StudentsPage = () => {
                                           <td>
                                             {sub.activityType
                                               ? sub.activityType
-                                              : sub.assessmentReason === 'warning-limit'
-                                                ? 'Submitted Due To Warning Limit'
-                                                : 'Submitted Normally'}
+                                              : ({
+                                                'manual-submit': 'Manual',
+                                                'warning-limit': 'Warning Limit',
+                                                'time-limit': 'Time Expired',
+                                              }[sub.assessmentReason] || 'Final assessment')}
                                           </td>
                                           <td>
                                             <span>{sub.warningCount || 0}/3</span>

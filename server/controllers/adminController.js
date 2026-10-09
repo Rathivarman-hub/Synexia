@@ -428,8 +428,8 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
       .limit(safeLimit)
       .lean(),
     AssessmentSubmission.find(assessmentFilter)
-      .select('-answers.code -answers.codeByLanguage -answers.testResults')
-      .sort({ submittedAt: -1 })
+        .select('-answers.codeByLanguage -answers.testResults')
+        .sort({ submittedAt: -1 })
       .limit(safeLimit)
       .lean(),
   ]);
@@ -453,6 +453,8 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
         totalTests,
         awardedPoints: accepted ? answer.maxScore ?? 0 : 0,
         maxScore: answer.maxScore ?? 0,
+        code: answer.code || '',
+        codeByLanguage: answer.codeByLanguage || {},
       };
     });
     return {
@@ -475,7 +477,7 @@ export const getStudentSubmissions = asyncHandler(async (req, res) => {
       totalCases: questionResults.reduce((sum, answer) => sum + answer.totalTests, 0),
       score: questionResults.reduce((sum, answer) => sum + answer.awardedPoints, 0),
       maxScore: questionResults.reduce((sum, answer) => sum + answer.maxScore, 0),
-      assessmentReason: submission.reason === 'warning-limit' ? 'warning-limit' : 'normal',
+      assessmentReason: submission.reason,
       warningCount: submission.warningCount,
       warningEvents: submission.warningEvents,
       executionTime: submission.answers.reduce((sum, answer) => sum + answer.executionTime, 0),
